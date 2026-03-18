@@ -804,7 +804,7 @@ function selectPayment(el, method) {
 }
 
 // ── Save ──
-function saveRecord(type) {
+async function saveRecord(type) {
   const btn = document.getElementById(type+'-save-btn');
   let amount, dateVal, cat, subCat, source, note, payment, cardName;
 
