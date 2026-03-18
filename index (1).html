@@ -1,0 +1,1939 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>記帳本</title>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0f0f0f;
+    --surface: #1a1a1a;
+    --surface2: #242424;
+    --border: #2e2e2e;
+    --text: #e8e8e8;
+    --text-dim: #888;
+    --text-dimmer: #555;
+    --accent: #c8f264;
+    --accent-dim: #a8d444;
+    --income: #4ade80;
+    --expense: #f87171;
+    --radius: 12px;
+    --radius-sm: 8px;
+    --transition: 0.18s ease;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Noto Sans TC', sans-serif;
+    font-size: 15px;
+    line-height: 1.6;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #app {
+    min-height: 100dvh;
+    max-width: 480px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── Pages ── */
+  .page { display: none; flex-direction: column; min-height: 100dvh; padding: 24px 20px; }
+  .page.active { display: flex; }
+
+  /* ── Header ── */
+  .page-header {
+    display: flex; align-items: center; gap: 12px;
+    margin-bottom: 28px;
+  }
+  .page-title {
+    font-size: 22px; font-weight: 700; letter-spacing: -0.5px;
+    flex: 1;
+  }
+  .accent-dot { color: var(--accent); }
+
+  /* ── Login Page ── */
+  #page-login {
+    justify-content: center; align-items: center; gap: 32px;
+    text-align: center;
+  }
+  .login-logo {
+    width: 72px; height: 72px; background: var(--accent);
+    border-radius: 20px; display: flex; align-items: center;
+    justify-content: center; font-size: 36px; margin: 0 auto;
+    box-shadow: 0 0 40px rgba(200,242,100,0.3);
+  }
+  .login-title { font-size: 28px; font-weight: 700; letter-spacing: -1px; }
+  .login-sub { color: var(--text-dim); font-size: 14px; }
+  #g-signin-btn { margin: 0 auto; }
+  .login-note { font-size: 12px; color: var(--text-dimmer); }
+
+  /* ── Home Page ── */
+  #page-home { justify-content: space-between; }
+  .home-top { flex: 1; }
+  .user-bar {
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: 36px;
+    padding: 12px 14px;
+    background: var(--surface);
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+  }
+  .user-avatar {
+    width: 32px; height: 32px; border-radius: 50%;
+    background: var(--accent); display: flex; align-items: center;
+    justify-content: center; font-size: 16px; font-weight: 700;
+    color: var(--bg); flex-shrink: 0;
+  }
+  .user-avatar img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
+  .user-name { font-size: 13px; color: var(--text-dim); flex: 1; }
+  .btn-logout {
+    font-size: 11px; color: var(--text-dimmer);
+    background: none; border: 1px solid var(--border);
+    border-radius: 6px; padding: 4px 10px; cursor: pointer;
+    transition: var(--transition);
+  }
+  .btn-logout:hover { color: var(--text); border-color: var(--text-dim); }
+  .home-greeting { font-size: 13px; color: var(--text-dim); margin-bottom: 6px; }
+  .home-date { font-size: 28px; font-weight: 700; letter-spacing: -1px; margin-bottom: 36px; }
+  .main-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .main-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 28px 20px;
+    cursor: pointer;
+    transition: var(--transition);
+    display: flex; flex-direction: column; gap: 12px;
+    text-align: center; align-items: center;
+  }
+  .main-card:hover, .main-card:active {
+    border-color: var(--accent);
+    background: var(--surface2);
+    transform: translateY(-2px);
+  }
+  .main-card .card-icon { font-size: 32px; }
+  .main-card .card-label { font-size: 18px; font-weight: 700; }
+  .main-card .card-sub { font-size: 12px; color: var(--text-dim); }
+
+  /* ── Ledger Tabs ── */
+  .nav-tabs {
+    display: grid; grid-template-columns: 1fr 1fr 1fr;
+    background: var(--surface); border-radius: var(--radius);
+    padding: 4px; gap: 4px; margin-bottom: 28px;
+  }
+  .nav-tab {
+    padding: 10px 6px; text-align: center; font-size: 13px; font-weight: 500;
+    border-radius: var(--radius-sm); cursor: pointer;
+    transition: var(--transition); color: var(--text-dim);
+    border: none; background: none;
+  }
+  .nav-tab.active { background: var(--accent); color: var(--bg); font-weight: 700; }
+  .nav-tab:hover:not(.active) { color: var(--text); background: var(--surface2); }
+
+  /* ── Form ── */
+  .form-section { flex: 1; display: flex; flex-direction: column; gap: 18px; }
+  .form-group { display: flex; flex-direction: column; gap: 6px; }
+  .form-label {
+    font-size: 11px; font-weight: 700; letter-spacing: 1px;
+    color: var(--text-dim); text-transform: uppercase;
+  }
+  .form-input, .form-select {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    font-family: inherit; font-size: 15px;
+    padding: 12px 14px;
+    width: 100%;
+    transition: var(--transition);
+    appearance: none; -webkit-appearance: none;
+  }
+  .form-input:focus, .form-select:focus {
+    outline: none; border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(200,242,100,0.1);
+  }
+  .form-input::placeholder { color: var(--text-dimmer); }
+  .form-select-wrap { position: relative; }
+  .form-select-wrap::after {
+    content: '▾'; position: absolute; right: 14px; top: 50%;
+    transform: translateY(-50%); color: var(--text-dim); pointer-events: none;
+  }
+
+  /* Category chips */
+  .cat-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .cat-chip {
+    padding: 7px 14px; border-radius: 20px; font-size: 13px; font-weight: 500;
+    border: 1px solid var(--border); background: var(--surface);
+    color: var(--text-dim); cursor: pointer; transition: var(--transition);
+  }
+  .cat-chip.active { background: var(--accent); color: var(--bg); border-color: var(--accent); font-weight: 700; }
+  .cat-chip:hover:not(.active) { border-color: var(--text-dim); color: var(--text); }
+  .cat-chip.invest-chip { border-color: #2d6a2d; color: #6abf6a; }
+  .cat-chip.invest-chip.active { background: #2d6a2d; color: #c8f5c8; border-color: #3a8a3a; }
+
+  /* ── Buttons ── */
+  .btn {
+    padding: 14px 20px; border-radius: var(--radius-sm);
+    font-family: inherit; font-size: 15px; font-weight: 700;
+    cursor: pointer; transition: var(--transition); border: none;
+    text-align: center; display: block; width: 100%;
+  }
+  .btn-primary { background: var(--accent); color: var(--bg); }
+  .btn-primary:hover { background: var(--accent-dim); }
+  .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-secondary { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
+  .btn-secondary:hover { border-color: var(--text-dim); }
+  .btn-back {
+    display: flex; align-items: center; gap: 6px;
+    background: none; border: none; color: var(--text-dim);
+    font-size: 13px; cursor: pointer; padding: 0;
+    font-family: inherit; transition: var(--transition);
+  }
+  .btn-back:hover { color: var(--text); }
+  .btn-row { display: flex; gap: 10px; }
+  .btn-row .btn { flex: 1; }
+  .bottom-bar { margin-top: auto; padding-top: 20px; display: flex; flex-direction: column; gap: 10px; }
+
+  /* ── Records list ── */
+  .records-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+  .record-item {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 14px 16px;
+    cursor: pointer; transition: var(--transition);
+    display: flex; align-items: center; gap: 14px;
+  }
+  .record-item:hover { border-color: var(--accent); }
+  .record-type-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .record-type-dot.income { background: var(--income); }
+  .record-type-dot.expense { background: var(--expense); }
+  .record-info { flex: 1; min-width: 0; }
+  .record-cat { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .record-date { font-size: 11px; color: var(--text-dim); font-family: 'DM Mono', monospace; }
+  .record-amount { font-family: 'DM Mono', monospace; font-size: 15px; font-weight: 500; flex-shrink: 0; }
+  .record-amount.income { color: var(--income); }
+  .record-amount.expense { color: var(--expense); }
+  .empty-state { text-align: center; color: var(--text-dimmer); padding: 48px 0; font-size: 14px; }
+  .empty-state .empty-icon { font-size: 36px; margin-bottom: 12px; }
+
+  /* ── Book Page ── */
+  .period-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+  .period-btn {
+    padding: 16px; background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); cursor: pointer; transition: var(--transition);
+    font-family: inherit; font-size: 14px; font-weight: 600; color: var(--text);
+    text-align: center;
+  }
+  .period-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* ── Summary Card ── */
+  .summary-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 20px; margin-bottom: 16px;
+  }
+  .summary-period { font-size: 12px; color: var(--text-dim); margin-bottom: 16px; letter-spacing: 0.5px; }
+  .summary-rows { display: flex; flex-direction: column; gap: 10px; }
+  .summary-row { display: flex; justify-content: space-between; align-items: center; }
+  .summary-row-label { font-size: 14px; color: var(--text-dim); }
+  .summary-row-value { font-family: 'DM Mono', monospace; font-size: 16px; font-weight: 600; }
+  .summary-divider { border: none; border-top: 1px solid var(--border); margin: 6px 0; }
+  .summary-cashflow { font-size: 18px !important; }
+  .positive { color: var(--income); }
+  .negative { color: var(--expense); }
+  .neutral { color: var(--text); }
+
+  /* ── Modal ── */
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.7);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 100; padding: 20px; backdrop-filter: blur(4px);
+  }
+  .modal {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 28px 24px;
+    width: 100%; max-width: 340px;
+    animation: modal-in 0.2s ease;
+  }
+  @keyframes modal-in { from { opacity:0; transform:scale(0.95); } to { opacity:1; transform:scale(1); } }
+  .modal-title { font-size: 17px; font-weight: 700; margin-bottom: 20px; }
+
+  /* ── Toast ── */
+  .toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    background: var(--surface2); border: 1px solid var(--accent);
+    color: var(--text); padding: 12px 20px; border-radius: var(--radius-sm);
+    font-size: 13px; z-index: 200; white-space: nowrap;
+    animation: toast-in 0.2s ease;
+  }
+  @keyframes toast-in { from { opacity:0; transform:translateX(-50%) translateY(10px); } to { opacity:1; transform:translateX(-50%) translateY(0); } }
+
+  /* Year select */
+  .year-select-row { display: flex; gap: 10px; align-items: center; margin-top: 10px; }
+  .year-select-row .form-select { flex: 1; }
+  .year-select-row .btn { width: auto; flex-shrink: 0; padding: 12px 20px; }
+
+  /* Payment row */
+  .pay-row { display: flex; flex-direction: column; }
+  .pay-chips { display: flex; gap: 8px; }
+
+  /* Delete checkbox */
+  .del-check-wrap {
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; flex-shrink: 0; padding: 4px;
+  }
+  .del-check-wrap input[type=checkbox] { display: none; }
+  .del-check-box {
+    width: 20px; height: 20px; border-radius: 6px;
+    border: 2px solid var(--expense);
+    background: var(--surface2);
+    transition: var(--transition);
+    display: flex; align-items: center; justify-content: center;
+    position: relative;
+  }
+  .del-check:checked + .del-check-box {
+    background: var(--expense);
+    border-color: var(--expense);
+  }
+  .del-check:checked + .del-check-box::after {
+    content: '✕';
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    position: absolute;
+  }
+
+  /* Test mode banner */
+  .test-banner {
+    background: #2a1f00; border-bottom: 1px solid #554000;
+    padding: 8px 16px; text-align: center;
+    font-size: 11px; color: #f5a623; letter-spacing: 0.5px;
+  }
+</style>
+</head>
+<body>
+
+<div id="app">
+
+  <!-- ══ LOGIN PAGE ══ -->
+  <div class="page active" id="page-login">
+    <div class="login-logo">💰</div>
+    <div>
+      <div class="login-title">記帳本<span class="accent-dot">.</span></div>
+      <div class="login-sub" style="margin-top:6px">以 Google 帳號登入，資料存於你的雲端硬碟</div>
+    </div>
+    <div id="g-signin-btn"></div>
+    <div class="login-note">資料僅存於你的個人 Google Drive，不會上傳至任何第三方伺服器</div>
+  </div>
+
+  <!-- ══ HOME PAGE ══ -->
+  <div class="page" id="page-home">
+    <div class="home-top">
+      <div class="user-bar">
+        <div class="user-avatar" id="user-avatar">💰</div>
+        <div class="user-name" id="user-name">使用者</div>
+        <button class="btn-logout" onclick="logout()">登出</button>
+      </div>
+      <div class="home-greeting">今天是</div>
+      <div class="home-date" id="home-date"></div>
+      <div class="main-cards">
+        <div class="main-card" onclick="showPage('page-ledger')">
+          <div class="card-icon">✏️</div>
+          <div class="card-label">記帳</div>
+          <div class="card-sub">新增 / 修改紀錄</div>
+        </div>
+        <div class="main-card" onclick="showPage('page-book')">
+          <div class="card-icon">📖</div>
+          <div class="card-label">帳本</div>
+          <div class="card-sub">查看報表統計</div>
+        </div>
+        <div class="main-card" onclick="confirmDeleteAll()" style="border-color:#3a1a1a">
+          <div class="card-icon">🗑️</div>
+          <div class="card-label" style="color:var(--expense)">刪除帳本</div>
+          <div class="card-sub">清除所有紀錄</div>
+        </div>
+        <div class="main-card" onclick="exportToCSV()">
+          <div class="card-icon">📤</div>
+          <div class="card-label">匯出帳本</div>
+          <div class="card-sub">下載 CSV 檔案</div>
+        </div>
+        <div class="main-card" onclick="showPage('page-settings')" style="grid-column:1/-1">
+          <div class="card-icon">⚙️</div>
+          <div class="card-label">設定</div>
+          <div class="card-sub">編輯收入／支出分類</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ LEDGER PAGE ══ -->
+  <div class="page" id="page-ledger">
+    <div class="page-header">
+      <button class="btn-back" onclick="showPage('page-home')">← 返回</button>
+      <div class="page-title">記帳<span class="accent-dot">.</span></div>
+    </div>
+    <div class="nav-tabs">
+      <button class="nav-tab active" onclick="switchLedgerTab('income')">收入</button>
+      <button class="nav-tab" onclick="switchLedgerTab('expense')">支出</button>
+      <button class="nav-tab" onclick="switchLedgerTab('modify')">修改</button>
+    </div>
+    <div id="ledger-content"></div>
+  </div>
+
+  <!-- ══ BOOK PAGE ══ -->
+  <div class="page" id="page-book">
+    <div class="page-header">
+      <button class="btn-back" onclick="showPage('page-home')">← 返回</button>
+      <div class="page-title">帳本<span class="accent-dot">.</span></div>
+    </div>
+    <div id="book-content"></div>
+  </div>
+
+  <!-- ══ SETTINGS PAGE ══ -->
+  <div class="page" id="page-settings">
+    <div class="page-header">
+      <button class="btn-back" onclick="showPage('page-home')">← 返回</button>
+      <div class="page-title">設定<span class="accent-dot">.</span></div>
+    </div>
+    <div id="settings-content"></div>
+  </div>
+
+</div>
+
+<!-- ══ MODAL ══ -->
+<div class="modal-overlay" id="modal" style="display:none">
+  <div class="modal">
+    <div class="modal-title" id="modal-title"></div>
+    <div id="modal-body"></div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════
+// GOOGLE CONFIG
+// ═══════════════════════════════════════════════════
+const CLIENT_ID  = '641894256809-ekljhqmcp6e8cur5c6f4qomb059n8fo0.apps.googleusercontent.com';
+const SCOPES     = 'https://www.googleapis.com/auth/drive.file';
+const FILE_NAME  = 'jizhangben_data.json';
+
+// ═══════════════════════════════════════════════════
+// CONSTANTS
+// ═══════════════════════════════════════════════════
+const INCOME_CATS_KEY        = 'incomeCats';
+const INCOME_INVEST_CATS_KEY = 'incomeInvestCats';
+const EXPENSE_CATS_KEY       = 'expenseCats';
+const CARD_NAMES_KEY         = 'cardNames';
+
+const DEFAULT_INCOME_CATS        = ['薪資','獎金','贈與','交易','其他'];
+const DEFAULT_INCOME_INVEST_CATS = ['股票','基金','房地產','加密貨幣','其他'];
+const DEFAULT_EXPENSE_CATS = {
+  '交通': ['燃油','停車','運輸','保養維修','其他'],
+  '餐飲': ['三餐','飲料','其他'],
+  '服裝': ['上衣','褲子','外套','鞋','內衣褲','其他'],
+  '電信': ['電話','網路','電視','其他'],
+  '娛樂': ['旅遊','運動','聚會','其他'],
+  '政府': ['醫療','稅金','罰單'],
+  '投資': ['股票','基金','房地產','加密貨幣','其他'],
+  '其他': ['其他'],
+};
+
+let INCOME_CATS        = [...DEFAULT_INCOME_CATS];
+let INCOME_INVEST_CATS = [...DEFAULT_INCOME_INVEST_CATS];
+let EXPENSE_CATS       = JSON.parse(JSON.stringify(DEFAULT_EXPENSE_CATS));
+
+// ═══════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════
+let records          = [];
+let editingRecord    = null;
+let currentLedgerTab = 'income';
+let cardNames        = [];
+let accessToken      = null;
+let userInfo         = null;
+let driveFileId      = null;
+
+// ═══════════════════════════════════════════════════
+// GOOGLE AUTH
+// ═══════════════════════════════════════════════════
+let tokenClient;
+
+function initGoogleAuth() {
+  google.accounts.id.initialize({
+    client_id: CLIENT_ID,
+    callback: handleCredential,
+    auto_select: false,
+  });
+  google.accounts.id.renderButton(
+    document.getElementById('g-signin-btn'),
+    { theme:'filled_black', size:'large', text:'signin_with', locale:'zh-TW', width:280 }
+  );
+  tokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: CLIENT_ID,
+    scope: SCOPES,
+    callback: async (resp) => {
+      if(resp.error) { showToast('授權失敗：'+resp.error); return; }
+      accessToken = resp.access_token;
+      showToast('⏳ 載入資料中…', 3000);
+      await loadDriveData();
+      showPage('page-home');
+    },
+  });
+}
+
+async function handleCredential(resp) {
+  const payload = JSON.parse(atob(resp.credential.split('.')[1]));
+  userInfo = { name: payload.name, email: payload.email, picture: payload.picture };
+  tokenClient.requestAccessToken({ prompt: '' });
+}
+
+function logout() {
+  google.accounts.id.disableAutoSelect();
+  accessToken = null; userInfo = null; driveFileId = null;
+  records = []; cardNames = [];
+  INCOME_CATS        = [...DEFAULT_INCOME_CATS];
+  INCOME_INVEST_CATS = [...DEFAULT_INCOME_INVEST_CATS];
+  EXPENSE_CATS       = JSON.parse(JSON.stringify(DEFAULT_EXPENSE_CATS));
+  showPage('page-login');
+}
+
+// ═══════════════════════════════════════════════════
+// GOOGLE DRIVE
+// ═══════════════════════════════════════════════════
+async function driveReq(url, opts={}) {
+  opts.headers = { ...(opts.headers||{}), Authorization: 'Bearer '+accessToken };
+  const res = await fetch(url, opts);
+  if(!res.ok) throw new Error(await res.text());
+  return res;
+}
+
+async function loadDriveData() {
+  try {
+    const res  = await driveReq(
+      `https://www.googleapis.com/drive/v3/files?q=name='${FILE_NAME}'+and+trashed=false&fields=files(id)`
+    );
+    const data = await res.json();
+    if(data.files && data.files.length > 0) {
+      driveFileId = data.files[0].id;
+      const fileRes = await driveReq(
+        `https://www.googleapis.com/drive/v3/files/${driveFileId}?alt=media`
+      );
+      const json = await fileRes.json();
+      records          = json.records          || [];
+      cardNames        = json.cardNames        || [];
+      INCOME_CATS        = json.incomeCats        || [...DEFAULT_INCOME_CATS];
+      INCOME_INVEST_CATS = json.incomeInvestCats  || [...DEFAULT_INCOME_INVEST_CATS];
+      EXPENSE_CATS       = json.expenseCats       || JSON.parse(JSON.stringify(DEFAULT_EXPENSE_CATS));
+    } else {
+      driveFileId = null;
+    }
+  } catch(e) {
+    showToast('載入資料失敗：'+e.message);
+  }
+}
+
+async function saveData() {
+  const body = JSON.stringify({
+    records, cardNames,
+    incomeCats: INCOME_CATS,
+    incomeInvestCats: INCOME_INVEST_CATS,
+    expenseCats: EXPENSE_CATS,
+  });
+  const blob = new Blob([body], {type:'application/json'});
+  try {
+    if(!driveFileId) {
+      const form = new FormData();
+      form.append('metadata', new Blob([JSON.stringify({name:FILE_NAME,mimeType:'application/json'})],{type:'application/json'}));
+      form.append('file', blob);
+      const res  = await driveReq(
+        'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id',
+        {method:'POST', body:form}
+      );
+      const d = await res.json();
+      driveFileId = d.id;
+    } else {
+      await driveReq(
+        `https://www.googleapis.com/upload/drive/v3/files/${driveFileId}?uploadType=media`,
+        {method:'PATCH', headers:{'Content-Type':'application/json'}, body}
+      );
+    }
+  } catch(e) {
+    throw new Error('Drive 儲存失敗：'+e.message);
+  }
+}
+
+// saveCategories now just calls saveData (all in one file)
+function saveCategories() { return saveData(); }
+function saveCardNames()   { return saveData(); }
+
+// ═══════════════════════════════════════════════════
+// UTILITIES
+// ═══════════════════════════════════════════════════
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
+function today() {
+  const d = new Date();
+  return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
+}
+function todayISO() { return new Date().toISOString().slice(0,10); }
+function fmt(n) { return Number(n).toLocaleString('zh-TW'); }
+function fmtD(d) {
+  return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
+}
+function parseRecordDate(str) {
+  const p = str.split('/');
+  return new Date(p[0], p[1]-1, p[2]);
+}
+
+function showToast(msg, dur=2400) {
+  document.querySelectorAll('.toast').forEach(t=>t.remove());
+  const t = document.createElement('div');
+  t.className='toast'; t.textContent=msg;
+  document.body.appendChild(t);
+  setTimeout(()=>t.remove(), dur);
+}
+function showModal(title, bodyHTML) {
+  document.getElementById('modal-title').textContent = title;
+  document.getElementById('modal-body').innerHTML = bodyHTML;
+  document.getElementById('modal').style.display = 'flex';
+}
+function hideModal() { document.getElementById('modal').style.display = 'none'; }
+
+// ═══════════════════════════════════════════════════
+// NAVIGATION
+// ═══════════════════════════════════════════════════
+function showPage(id) {
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  if(id==='page-home')     renderHome();
+  if(id==='page-ledger')   renderLedgerContent();
+  if(id==='page-book')     renderBookPage();
+  if(id==='page-settings') renderSettingsMain();
+}
+
+// ═══════════════════════════════════════════════════
+// HOME
+// ═══════════════════════════════════════════════════
+function renderHome() {
+  const d = new Date();
+  document.getElementById('home-date').textContent =
+    `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日`;
+  if(userInfo) {
+    const av = document.getElementById('user-avatar');
+    document.getElementById('user-name').textContent = userInfo.name || userInfo.email;
+    if(userInfo.picture) av.innerHTML = `<img src="${userInfo.picture}" alt="">`;
+    else av.textContent = (userInfo.name||'U')[0];
+  }
+}
+// ═══════════════════════════════════════════════════
+function switchLedgerTab(tab) {
+  currentLedgerTab = tab;
+  document.querySelectorAll('.nav-tab').forEach((el,i)=>{
+    el.classList.toggle('active', ['income','expense','modify'][i]===tab);
+  });
+  editingRecord = null;
+  renderLedgerContent();
+}
+
+function renderLedgerContent() {
+  const c = document.getElementById('ledger-content');
+  if(currentLedgerTab==='income') c.innerHTML = incomeFormHTML();
+  else if(currentLedgerTab==='expense') c.innerHTML = expenseFormHTML();
+  else c.innerHTML = modifyHTML();
+}
+
+// ── Income Form ──
+function incomeFormHTML(rec=null) {
+  const isInvest  = rec ? rec.category === INVEST_CAT : false;
+  const selCat    = rec ? rec.category : INCOME_CATS[0];
+  const selInvSub = rec ? (rec.subCategory||INCOME_INVEST_CATS[0]) : INCOME_INVEST_CATS[0];
+  const dateVal   = rec ? rec.date.replace(/\//g,'-') : todayISO();
+
+  // Regular category chips (no 投資 here — it's a separate button)
+  const chips = INCOME_CATS.map(c=>
+    `<div class="cat-chip${c===selCat&&!isInvest?' active':''}" onclick="selectIncomeCat(this,'${c}')">${c}</div>`
+  ).join('');
+  const investChip = `<div class="cat-chip invest-chip${isInvest?' active':''}" onclick="selectIncomeCat(this,'${INVEST_CAT}')">${INVEST_CAT}</div>`;
+
+  // Sub-category chips for 投資
+  const investSubChips = INCOME_INVEST_CATS.map(s=>
+    `<div class="cat-chip${s===selInvSub?' active':''}" onclick="selectCat(this,'income-invest-sub')">${s}</div>`
+  ).join('');
+
+  return `
+  <div class="form-section">
+    <div class="form-group">
+      <div class="form-label">收入類別</div>
+      <div class="cat-chips">${chips}${investChip}</div>
+      <input type="hidden" id="income-cat" value="${isInvest ? INVEST_CAT : selCat}">
+    </div>
+    <div id="income-invest-sub-wrap" style="display:${isInvest?'block':'none'}">
+      <div class="form-group">
+        <div class="form-label">投資子類別</div>
+        <div class="cat-chips">${investSubChips}</div>
+        <input type="hidden" id="income-invest-sub" value="${selInvSub}">
+      </div>
+    </div>
+    <div class="form-group">
+      <div class="form-label">來源 <span style="color:var(--text-dimmer)">(選填，最多10字)</span></div>
+      <input class="form-input" id="income-source" type="text" maxlength="10"
+        placeholder="薪資來源、贈與者…" value="${rec ? (rec.source||'') : ''}">
+    </div>
+    <div class="form-group">
+      <div class="form-label">金額 <span style="color:var(--expense)">*</span></div>
+      <input class="form-input" id="income-amount" type="number" min="1" max="999999999"
+        placeholder="請輸入金額" inputmode="numeric" value="${rec ? rec.amount : ''}">
+    </div>
+    <div class="form-group">
+      <div class="form-label">日期 <span style="color:var(--text-dimmer)">(未填自動帶入今天)</span></div>
+      <input class="form-input" id="income-date" type="date" value="${dateVal}">
+    </div>
+    <div class="bottom-bar">
+      <button class="btn btn-primary" id="income-save-btn" onclick="saveRecord('income')">儲存</button>
+      <button class="btn btn-secondary" onclick="goBackToLedger()">返回記帳</button>
+    </div>
+  </div>`;
+}
+
+function selectIncomeCat(el, cat) {
+  el.parentElement.querySelectorAll('.cat-chip').forEach(c=>c.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('income-cat').value = cat;
+  const wrap = document.getElementById('income-invest-sub-wrap');
+  wrap.style.display = cat===INVEST_CAT ? 'block' : 'none';
+}
+
+// ── Expense Form ──
+function expenseFormHTML(rec=null) {
+  const mainCats  = Object.keys(EXPENSE_CATS);
+  const selMain   = rec ? rec.category    : mainCats[0];
+  // For 投資, sub-cats come from INCOME_INVEST_CATS (shared source of truth)
+  const subSource = selMain===INVEST_CAT ? INCOME_INVEST_CATS : (EXPENSE_CATS[selMain]||['其他']);
+  const selSub    = rec ? (rec.subCategory||subSource[0]) : subSource[0];
+  const dateVal   = rec ? rec.date.replace(/\//g,'-') : todayISO();
+  const selPay    = rec ? (rec.payment || '現金') : '現金';
+  const selCard   = rec ? (rec.cardName || '') : '';
+
+  const mainChips = mainCats.map(c=>
+    `<div class="cat-chip${c===selMain?' active':''}${c===INVEST_CAT?' invest-chip':''}" onclick="selectExpenseMain(this,'${c}')">${c}</div>`
+  ).join('');
+  const subChips = subSource.map(s=>
+    `<div class="cat-chip${s===selSub?' active':''}" onclick="selectCat(this,'expense-sub')">${s}</div>`
+  ).join('');
+
+  const datalistOpts = cardNames.map(n=>`<option value="${n}">`).join('');
+
+  return `
+  <div class="form-section">
+    <div class="form-group">
+      <div class="form-label">支出大類</div>
+      <div class="cat-chips" id="expense-main-chips">${mainChips}</div>
+      <input type="hidden" id="expense-cat" value="${selMain}">
+    </div>
+    <div class="form-group">
+      <div class="form-label">子類別</div>
+      <div class="cat-chips" id="expense-sub-chips">${subChips}</div>
+      <input type="hidden" id="expense-sub" value="${selSub}">
+    </div>
+    <div class="form-group">
+      <div class="form-label">付款方式</div>
+      <div class="pay-row">
+        <div class="pay-chips">
+          <div class="cat-chip${selPay==='現金'?' active':''}"
+            onclick="selectPayment(this,'現金')">現金</div>
+          <div class="cat-chip${selPay==='信用卡'?' active':''}"
+            onclick="selectPayment(this,'信用卡')">信用卡</div>
+        </div>
+        <div id="card-name-wrap" style="display:${selPay==='信用卡'?'flex':'none'};align-items:center;gap:8px;margin-top:10px">
+          <input class="form-input" id="expense-card" type="text" maxlength="10"
+            list="card-datalist" placeholder="請輸入卡片名稱（必填）"
+            value="${selCard}" style="flex:1">
+          <datalist id="card-datalist">${datalistOpts}</datalist>
+        </div>
+      </div>
+      <input type="hidden" id="expense-payment" value="${selPay}">
+    </div>
+    <div class="form-group">
+      <div class="form-label">附註 <span style="color:var(--text-dimmer)">(選填，最多10字)</span></div>
+      <input class="form-input" id="expense-note" type="text" maxlength="10"
+        placeholder="備註說明…" value="${rec ? (rec.note||'') : ''}">
+    </div>
+    <div class="form-group">
+      <div class="form-label">日期 <span style="color:var(--text-dimmer)">(未填自動帶入今天)</span></div>
+      <input class="form-input" id="expense-date" type="date" value="${dateVal}">
+    </div>
+    <div class="form-group">
+      <div class="form-label">金額 <span style="color:var(--expense)">*</span></div>
+      <input class="form-input" id="expense-amount" type="number" min="1" max="999999999"
+        placeholder="請輸入金額" inputmode="numeric" value="${rec ? rec.amount : ''}">
+    </div>
+    <div class="bottom-bar">
+      <button class="btn btn-primary" id="expense-save-btn" onclick="saveRecord('expense')">儲存</button>
+      <button class="btn btn-secondary" onclick="goBackToLedger()">返回記帳</button>
+    </div>
+  </div>`;
+}
+
+// ── Chip helpers ──
+function selectCat(el, hiddenId) {
+  el.parentElement.querySelectorAll('.cat-chip').forEach(c=>c.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById(hiddenId).value = el.textContent;
+}
+
+function selectExpenseMain(el, cat) {
+  el.parentElement.querySelectorAll('.cat-chip').forEach(c=>c.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('expense-cat').value = cat;
+  // 投資 uses shared INCOME_INVEST_CATS as sub-category source
+  const subs = cat===INVEST_CAT ? INCOME_INVEST_CATS : (EXPENSE_CATS[cat]||['其他']);
+  document.getElementById('expense-sub-chips').innerHTML = subs.map((s,i)=>
+    `<div class="cat-chip${i===0?' active':''}" onclick="selectCat(this,'expense-sub')">${s}</div>`
+  ).join('');
+  document.getElementById('expense-sub').value = subs[0];
+}
+
+function selectPayment(el, method) {
+  el.parentElement.querySelectorAll('.cat-chip').forEach(c=>c.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('expense-payment').value = method;
+  const wrap = document.getElementById('card-name-wrap');
+  wrap.style.display = method==='信用卡' ? 'flex' : 'none';
+  if(method==='現金') document.getElementById('expense-card').value = '';
+}
+
+// ── Save ──
+function saveRecord(type) {
+  const btn = document.getElementById(type+'-save-btn');
+  let amount, dateVal, cat, subCat, source, note, payment, cardName;
+
+  if(type==='income') {
+    amount   = document.getElementById('income-amount').value.trim();
+    dateVal  = document.getElementById('income-date').value;
+    cat      = document.getElementById('income-cat').value;
+    source   = document.getElementById('income-source').value.trim();
+    subCat   = cat===INVEST_CAT ? document.getElementById('income-invest-sub').value : '';
+  } else {
+    amount   = document.getElementById('expense-amount').value.trim();
+    dateVal  = document.getElementById('expense-date').value;
+    cat      = document.getElementById('expense-cat').value;
+    subCat   = document.getElementById('expense-sub').value;
+    note     = document.getElementById('expense-note').value.trim();
+    payment  = document.getElementById('expense-payment').value;
+    cardName = payment==='信用卡'
+      ? document.getElementById('expense-card').value.trim()
+      : '';
+  }
+
+  const amtNum = parseInt(amount, 10);
+  if(!amount || isNaN(amtNum) || amtNum <= 0 || amtNum > 999999999) {
+    showToast('請輸入有效金額（1 ～ 999,999,999）'); return;
+  }
+  if(type==='expense' && payment==='信用卡' && !cardName) {
+    showToast('請填入信用卡名稱'); return;
+  }
+  if(!dateVal) dateVal = todayISO();
+  const fmtDate = dateVal.replace(/-/g,'/');
+
+  btn.disabled = true;
+  btn.textContent = '儲存中…';
+
+  if(type==='expense' && payment==='信用卡' && cardName && !cardNames.includes(cardName)) {
+    cardNames.push(cardName);
+  }
+
+  const rec = {
+    id:          editingRecord ? editingRecord.id : uid(),
+    type,
+    category:    cat,
+    subCategory: subCat    || '',
+    source:      source    || '',
+    note:        note      || '',
+    payment:     payment   || '',
+    cardName:    cardName  || '',
+    amount:      amtNum,
+    date:        fmtDate,
+    createdAt:   editingRecord ? editingRecord.createdAt : Date.now(),
+  };
+
+  if(editingRecord) {
+    const idx = records.findIndex(r=>r.id===editingRecord.id);
+    if(idx>=0) records[idx]=rec; else records.push(rec);
+  } else {
+    records.push(rec);
+  }
+
+  try {
+    await saveData();
+    editingRecord = null;
+    const label = type==='income' ? '收入' : '支出';
+    showModal(`是否繼續寫入${label}？`, `
+      <div class="btn-row" style="margin-top:4px">
+        <button class="btn btn-secondary" onclick="hideModal();continueEntry('${type}')">是</button>
+        <button class="btn btn-primary" onclick="hideModal();goBackToLedger()">否</button>
+      </div>`);
+  } catch(e) {
+    showToast('儲存失敗：'+e.message);
+    btn.disabled = false;
+    btn.textContent = '儲存';
+  }
+}
+
+function continueEntry(type) {
+  currentLedgerTab = type;
+  document.querySelectorAll('.nav-tab').forEach((el,i)=>{
+    el.classList.toggle('active', ['income','expense','modify'][i]===type);
+  });
+  renderLedgerContent();
+}
+
+function goBackToLedger() {
+  // Reset to income tab view (no editing)
+  editingRecord = null;
+  currentLedgerTab = 'income';
+  document.querySelectorAll('.nav-tab').forEach((el,i)=>el.classList.toggle('active', i===0));
+  renderLedgerContent();
+  // If we're on the ledger page already this is fine; if coming from modal just stay
+}
+
+// ── Modify ──
+function modifyHTML() {
+  return `
+  <div>
+    <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:20px">
+      <button class="period-btn" onclick="showRecent10()">最近 10 筆紀錄</button>
+      <button class="period-btn" onclick="show14Days()">14 日區間</button>
+      <button class="period-btn" onclick="showDatePicker()">指定日期</button>
+    </div>
+    <div id="modify-result"></div>
+    <div class="bottom-bar">
+      <button class="btn btn-secondary" onclick="goBackToLedger()">返回記帳</button>
+    </div>
+  </div>`;
+}
+
+function show14Days() {
+  const now = new Date();
+  const from = new Date(now); from.setDate(from.getDate()-13); from.setHours(0,0,0,0);
+  const to   = new Date(now); to.setHours(23,59,59,999);
+  const found = records.filter(r=>{
+    const d = parseRecordDate(r.date);
+    return d>=from && d<=to;
+  }).sort((a,b)=>b.createdAt-a.createdAt);
+  document.getElementById('modify-result').innerHTML =
+    found.length ? recordsListHTML(found) :
+    `<div class="empty-state"><div class="empty-icon">📭</div>近 14 日無資料</div>`;
+}
+
+function showRecent10() {
+  const sorted = [...records].sort((a,b)=>b.createdAt-a.createdAt).slice(0,10);
+  document.getElementById('modify-result').innerHTML =
+    sorted.length ? recordsListHTML(sorted) :
+    `<div class="empty-state"><div class="empty-icon">📭</div>尚無任何紀錄</div>`;
+}
+
+function showDatePicker() {
+  document.getElementById('modify-result').innerHTML = `
+    <div style="margin-bottom:14px">
+      <div class="form-label" style="margin-bottom:8px">選擇日期</div>
+      <div style="display:flex;gap:10px">
+        <input class="form-input" id="modify-date-pick" type="date"
+          value="${todayISO()}" style="flex:1">
+        <button class="btn btn-primary" style="width:auto;padding:12px 20px"
+          onclick="searchByDate()">確定</button>
+      </div>
+    </div>
+    <div id="modify-date-result"></div>`;
+}
+
+function searchByDate() {
+  const d = document.getElementById('modify-date-pick').value.replace(/-/g,'/');
+  const found = records.filter(r=>r.date===d).sort((a,b)=>b.createdAt-a.createdAt);
+  document.getElementById('modify-date-result').innerHTML =
+    found.length ? recordsListHTML(found) :
+    `<div class="empty-state"><div class="empty-icon">📭</div>該日期無資料</div>`;
+}
+
+function recordsListHTML(list) {
+  const items = list.map(r=>{
+    const isIncome = r.type==='income';
+    const catLabel = isIncome ? r.category : `${r.category}・${r.subCategory}`;
+    const subLabel = isIncome ? (r.source||'') : (r.note||'');
+    let payBadge = '';
+    if(!isIncome && r.payment) {
+      const isCard = r.payment==='信用卡';
+      const cardTxt = isCard && r.cardName ? ` ${r.cardName}` : '';
+      payBadge = `<span style="
+        font-size:10px;font-weight:600;padding:2px 7px;border-radius:10px;margin-left:6px;
+        background:${isCard?'#1a2a3a':'#1a1a1a'};
+        color:${isCard?'#60a5fa':'var(--text-dimmer)'};
+        border:1px solid ${isCard?'#2a4a6a':'var(--border)'};
+        vertical-align:middle;
+      ">${r.payment}${cardTxt}</span>`;
+    }
+    return `<div class="record-item" id="ri-${r.id}">
+      <div class="record-type-dot ${r.type}"></div>
+      <div class="record-info" onclick="editRecord('${r.id}')" style="cursor:pointer;flex:1;min-width:0">
+        <div class="record-cat">${catLabel}${subLabel
+          ? ` <span style="color:var(--text-dimmer);font-weight:400">${subLabel}</span>`
+          : ''}${payBadge}</div>
+        <div class="record-date">${r.date} · ${isIncome?'收入':'支出'}</div>
+      </div>
+      <div class="record-amount ${r.type}" style="margin-right:10px">${isIncome?'+':'-'}${fmt(r.amount)}</div>
+      <label class="del-check-wrap" title="勾選刪除">
+        <input type="checkbox" class="del-check" data-id="${r.id}" onchange="onDelCheckChange()">
+        <span class="del-check-box"></span>
+      </label>
+    </div>`;
+  }).join('');
+  return `
+    <div class="records-list" id="records-list-wrap">${items}</div>
+    <div id="del-confirm-bar" style="display:none;margin-top:14px">
+      <button class="btn" style="background:var(--expense);color:#fff" onclick="confirmDeleteSelected()">確認刪除</button>
+    </div>`;
+}
+
+function onDelCheckChange() {
+  const anyChecked = document.querySelectorAll('.del-check:checked').length > 0;
+  const bar = document.getElementById('del-confirm-bar');
+  if(bar) bar.style.display = anyChecked ? 'block' : 'none';
+}
+
+let pendingDeleteIds = [];
+
+function confirmDeleteSelected() {
+  const checked = [...document.querySelectorAll('.del-check:checked')];
+  if(!checked.length) return;
+  pendingDeleteIds = checked.map(el=>el.dataset.id);
+  const count = pendingDeleteIds.length;
+
+  const preview = pendingDeleteIds.map(id=>{
+    const r = records.find(x=>x.id===id);
+    if(!r) return '';
+    const isIncome = r.type==='income';
+    const cat = isIncome ? r.category : `${r.category}・${r.subCategory}`;
+    return `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px">
+      <span style="color:var(--text-dim)">${r.date}　${cat}</span>
+      <span style="color:${isIncome?'var(--income)':'var(--expense)'};font-family:DM Mono,monospace">
+        ${isIncome?'+':'-'}${fmt(r.amount)}
+      </span>
+    </div>`;
+  }).join('');
+
+  showModal(`確認刪除 ${count} 筆紀錄？`, `
+    <div style="margin-bottom:16px;max-height:200px;overflow-y:auto">${preview}</div>
+    <div class="btn-row">
+      <button class="btn btn-secondary" onclick="hideModal()">否</button>
+      <button class="btn" style="background:var(--expense);color:#fff"
+        onclick="executeDelete()">是</button>
+    </div>`);
+}
+
+async function executeDelete() {
+  hideModal();
+  const count = pendingDeleteIds.length;
+  records = records.filter(r=>!pendingDeleteIds.includes(r.id));
+  pendingDeleteIds = [];
+  try {
+    await saveData();
+    showToast(`✅ 已刪除 ${count} 筆紀錄`);
+  } catch(e) {
+    showToast('刪除失敗：'+e.message);
+  }
+  currentLedgerTab = 'modify';
+  document.querySelectorAll('.nav-tab').forEach((el,i)=>el.classList.toggle('active', i===2));
+  renderLedgerContent();
+}
+
+function editRecord(id) {
+  const rec = records.find(r=>r.id===id);
+  if(!rec) return;
+  editingRecord = rec;
+  currentLedgerTab = rec.type;
+  document.querySelectorAll('.nav-tab').forEach((el,i)=>{
+    el.classList.toggle('active', ['income','expense','modify'][i]===rec.type);
+  });
+  const c = document.getElementById('ledger-content');
+  c.innerHTML = rec.type==='income' ? incomeFormHTML(rec) : expenseFormHTML(rec);
+}
+
+// ═══════════════════════════════════════════════════
+// BOOK PAGE
+// ═══════════════════════════════════════════════════
+function renderBookPage() {
+  document.getElementById('book-content').innerHTML = `
+    <div class="period-grid">
+      <button class="period-btn" onclick="showSummary('thisMonth')">本月</button>
+      <button class="period-btn" onclick="showSummary('lastMonth')">上月</button>
+      <button class="period-btn" onclick="showSummary('3months')">三個月</button>
+      <button class="period-btn" onclick="showSummary('yearPick')">指定年份</button>
+      <button class="period-btn" style="grid-column:1/-1" onclick="showCustomRange()">指定區間</button>
+    </div>
+    <div id="book-result"></div>`;
+}
+
+function showSummary(period) {
+  const now = new Date();
+  let label, from, to;
+  if(period==='thisMonth') {
+    from = new Date(now.getFullYear(), now.getMonth(), 1); to = now;
+    label = `${now.getFullYear()}年${now.getMonth()+1}月（至今日）`;
+  } else if(period==='lastMonth') {
+    const lm = new Date(now.getFullYear(), now.getMonth()-1, 1);
+    from = lm; to = new Date(now.getFullYear(), now.getMonth(), 0);
+    label = `${lm.getFullYear()}年${lm.getMonth()+1}月`;
+  } else if(period==='3months') {
+    from = new Date(now); from.setDate(from.getDate()-90); to = now;
+    label = `近三個月（${fmtD(from)} ～ ${fmtD(to)}）`;
+  } else if(period==='yearPick') {
+    showYearPicker(); return;
+  }
+  document.getElementById('book-result').innerHTML = summaryCardHTML(label, from, to);
+}
+
+function showYearPicker() {
+  const now = new Date();
+  const years = [];
+  for(let y=now.getFullYear(); y>=2020; y--) years.push(y);
+  document.getElementById('book-result').innerHTML = `
+    <div class="year-select-row">
+      <div class="form-select-wrap" style="flex:1">
+        <select class="form-select" id="year-pick">
+          ${years.map(y=>`<option value="${y}">${y}</option>`).join('')}
+        </select>
+      </div>
+      <button class="btn btn-primary" style="width:auto;padding:12px 20px"
+        onclick="confirmYearPick()">確定</button>
+    </div>
+    <div id="year-pick-result"></div>`;
+}
+
+function confirmYearPick() {
+  const y = parseInt(document.getElementById('year-pick').value);
+  const from = new Date(y, 0, 1), to = new Date(y, 11, 31);
+  document.getElementById('year-pick-result').innerHTML = summaryCardHTML(`${y}年`, from, to);
+}
+
+// ── Custom Range ──
+function showCustomRange() {
+  const todayStr = todayISO();
+  // Show a sub-page inside book-content
+  document.getElementById('book-content').innerHTML = `
+    <div class="page-header" style="margin-bottom:20px">
+      <div class="page-title">指定區間<span class="accent-dot">.</span></div>
+    </div>
+    <div class="form-section" style="gap:20px">
+      <div class="form-group">
+        <div class="form-label">開始日期</div>
+        <input class="form-input" type="date" id="range-from"
+          max="${todayStr}" onchange="onRangeDateChange()">
+      </div>
+      <div class="form-group">
+        <div class="form-label">結束日期</div>
+        <input class="form-input" type="date" id="range-to"
+          max="${todayStr}" value="${todayStr}" onchange="onRangeDateChange()">
+      </div>
+      <div id="range-hint" style="font-size:13px;color:var(--text-dimmer);min-height:20px"></div>
+      <div id="range-result"></div>
+    </div>
+    <div class="bottom-bar">
+      <button class="btn btn-primary" id="range-confirm-btn" onclick="confirmCustomRange()" disabled>確定</button>
+      <button class="btn btn-secondary" onclick="renderBookPage()">取消</button>
+    </div>`;
+}
+
+function onRangeDateChange() {
+  const fromVal = document.getElementById('range-from').value;
+  const toVal   = document.getElementById('range-to').value;
+  const hint    = document.getElementById('range-hint');
+  const btn     = document.getElementById('range-confirm-btn');
+  const todayStr = todayISO();
+
+  // Clear result when dates change
+  document.getElementById('range-result').innerHTML = '';
+
+  if(!fromVal || !toVal) {
+    hint.textContent = '';
+    hint.style.color = 'var(--text-dimmer)';
+    btn.disabled = true;
+    return;
+  }
+
+  const from = new Date(fromVal);
+  const to   = new Date(toVal);
+
+  if(from > to) {
+    hint.textContent = '⚠️ 開始日期不可晚於結束日期';
+    hint.style.color = 'var(--expense)';
+    btn.disabled = true;
+    return;
+  }
+
+  if(toVal > todayStr) {
+    hint.textContent = '⚠️ 結束日期不可超過今天';
+    hint.style.color = 'var(--expense)';
+    btn.disabled = true;
+    return;
+  }
+
+  const days = Math.round((to - from) / 86400000) + 1;
+
+  if(days > 180) {
+    hint.textContent = `⚠️ 已超過區間上限（目前 ${days} 日，上限 180 日）`;
+    hint.style.color = 'var(--expense)';
+    btn.disabled = true;
+    return;
+  }
+
+  hint.textContent = `區間共 ${days} 日`;
+  hint.style.color = 'var(--income)';
+  btn.disabled = false;
+}
+
+function confirmCustomRange() {
+  const fromVal = document.getElementById('range-from').value;
+  const toVal   = document.getElementById('range-to').value;
+  if(!fromVal || !toVal) return;
+
+  const from  = new Date(fromVal);
+  const to    = new Date(toVal);
+  const label = `${fromVal.replace(/-/g,'/')} ～ ${toVal.replace(/-/g,'/')}`;
+
+  document.getElementById('book-content').innerHTML = `
+    <div class="page-header" style="margin-bottom:20px">
+      <div class="page-title">指定區間<span class="accent-dot">.</span></div>
+    </div>
+    ${summaryCardHTML(label, from, to)}
+    <div class="bottom-bar">
+      <button class="btn btn-secondary" onclick="renderBookPage()">返回帳本</button>
+    </div>`;
+}
+
+const INVEST_CAT = '投資'; // the category name used for investment
+
+function calcSummary(from, to) {
+  let income=0, expense=0;
+  let investIncome=0, investExpense=0;
+  const incomeByCat  = {};
+  const expenseByCat = {};
+  const expenseByCard= {};
+
+  const fromT = new Date(from); fromT.setHours(0,0,0,0);
+  const toT   = new Date(to);   toT.setHours(23,59,59,999);
+
+  records.forEach(r=>{
+    const d = parseRecordDate(r.date);
+    if(d < fromT || d > toT) return;
+
+    const isInvest = r.category === INVEST_CAT;
+
+    if(r.type==='income') {
+      if(isInvest) {
+        investIncome += r.amount;
+      } else {
+        income += r.amount;
+        incomeByCat[r.category] = (incomeByCat[r.category]||0) + r.amount;
+      }
+    } else {
+      if(isInvest) {
+        investExpense += r.amount;
+      } else {
+        expense += r.amount;
+        expenseByCat[r.category] = (expenseByCat[r.category]||0) + r.amount;
+        if(r.payment==='信用卡') {
+          const key = r.cardName || '（未命名）';
+          expenseByCard[key] = (expenseByCard[key]||0) + r.amount;
+        }
+      }
+    }
+  });
+  return {income, expense, flow: income-expense,
+          investIncome, investExpense,
+          incomeByCat, expenseByCat, expenseByCard};
+}
+
+// Build a detail breakdown section
+function breakdownHTML(title, map, colorClass, prefix) {
+  const entries = Object.entries(map).sort((a,b)=>b[1]-a[1]);
+  if(!entries.length) return '';
+  const total = entries.reduce((s,[,v])=>s+v, 0);
+  const rows = entries.map(([k,v])=>`
+    <div class="summary-row" style="padding-left:8px">
+      <div class="summary-row-label" style="font-size:13px">${k}</div>
+      <div class="summary-row-value ${colorClass}" style="font-size:13px">${prefix}${fmt(v)}</div>
+    </div>`).join('');
+  return `
+  <div class="summary-card" style="margin-top:12px">
+    <div class="summary-period">${title}</div>
+    <div class="summary-rows">
+      ${rows}
+      <hr class="summary-divider">
+      <div class="summary-row">
+        <div class="summary-row-label" style="font-weight:700">合計</div>
+        <div class="summary-row-value ${colorClass}" style="font-weight:700">${prefix}${fmt(total)}</div>
+      </div>
+    </div>
+  </div>`;
+}
+
+// Store current period for export
+let currentSummaryFrom = null;
+let currentSummaryTo   = null;
+let currentSummaryLabel = '';
+
+function summaryCardHTML(label, from, to) {
+  const {income, expense, flow,
+         investIncome, investExpense,
+         incomeByCat, expenseByCat, expenseByCard} = calcSummary(from, to);
+
+  const hasRegular = income>0 || expense>0;
+  const hasInvest  = investIncome>0 || investExpense>0;
+  if(!hasRegular && !hasInvest)
+    return `<div class="empty-state"><div class="empty-icon">📭</div>該期間無資料</div>`;
+
+  // Store for export
+  currentSummaryFrom  = from;
+  currentSummaryTo    = to;
+  currentSummaryLabel = label;
+
+  const flowClass  = flow>0?'positive':flow<0?'negative':'neutral';
+  const flowPrefix = flow>0?'+':'';
+
+  // Investment block
+  const investReturn  = investIncome - investExpense;
+  const iReturnClass  = investReturn>0?'positive':investReturn<0?'negative':'neutral';
+  const iReturnPrefix = investReturn>0?'+':'';
+  const investBlock = hasInvest ? `
+  <div class="summary-card" style="margin-top:12px;border-color:#2a3a1a">
+    <div class="summary-period" style="color:#a8d444">📈 投資統整</div>
+    <div class="summary-rows">
+      <div class="summary-row" style="padding-left:8px">
+        <div class="summary-row-label" style="font-size:13px">投資收入</div>
+        <div class="summary-row-value positive" style="font-size:13px">+${fmt(investIncome)}</div>
+      </div>
+      <div class="summary-row" style="padding-left:8px">
+        <div class="summary-row-label" style="font-size:13px">投資支出</div>
+        <div class="summary-row-value negative" style="font-size:13px">-${fmt(investExpense)}</div>
+      </div>
+      <hr class="summary-divider">
+      <div class="summary-row">
+        <div class="summary-row-label" style="font-weight:700">投資總收益</div>
+        <div class="summary-row-value summary-cashflow ${iReturnClass}">${iReturnPrefix}${fmt(investReturn)}</div>
+      </div>
+    </div>
+  </div>` : '';
+
+  const incomeBreakdown  = hasRegular ? breakdownHTML('💰 收入細項（依大類）', incomeByCat,  'positive', '+') : '';
+  const expenseBreakdown = hasRegular ? breakdownHTML('💸 支出細項（依大類）', expenseByCat, 'negative', '-') : '';
+  const cardBreakdown    = Object.keys(expenseByCard).length
+    ? breakdownHTML('💳 信用卡支出（依卡別）', expenseByCard, 'negative', '-') : '';
+
+  const mainBlock = hasRegular ? `
+  <div class="summary-card">
+    <div class="summary-period">${label}</div>
+    <div class="summary-rows">
+      <div class="summary-row">
+        <div class="summary-row-label">💰 總收入</div>
+        <div class="summary-row-value positive">+${fmt(income)}</div>
+      </div>
+      <div class="summary-row">
+        <div class="summary-row-label">💸 總支出</div>
+        <div class="summary-row-value negative">-${fmt(expense)}</div>
+      </div>
+      <hr class="summary-divider">
+      <div class="summary-row">
+        <div class="summary-row-label">📊 現金流量</div>
+        <div class="summary-row-value summary-cashflow ${flowClass}">${flowPrefix}${fmt(flow)}</div>
+      </div>
+    </div>
+  </div>` : `<div class="summary-card"><div class="summary-period">${label}</div>
+    <div style="color:var(--text-dimmer);font-size:13px;padding:8px 0">本期無一般收支資料</div></div>`;
+
+  return `
+  ${mainBlock}
+  ${investBlock}
+  ${incomeBreakdown}
+  ${expenseBreakdown}
+  ${cardBreakdown}
+  <div style="margin-top:16px">
+    <button class="btn btn-secondary" onclick="exportPeriodCSV()" style="border-color:var(--accent);color:var(--accent)">
+      📤 匯出此時間段資料
+    </button>
+  </div>`;
+}
+
+function exportPeriodCSV() {
+  if(!currentSummaryFrom || !currentSummaryTo) return;
+
+  const fromT = new Date(currentSummaryFrom); fromT.setHours(0,0,0,0);
+  const toT   = new Date(currentSummaryTo);   toT.setHours(23,59,59,999);
+  const periodRecords = records.filter(r=>{
+    const d = parseRecordDate(r.date);
+    return d >= fromT && d <= toT;
+  }).sort((a,b)=> a.date.localeCompare(b.date) || a.createdAt-b.createdAt);
+
+  if(!periodRecords.length) { showToast('此時間段無資料可匯出'); return; }
+
+  const header = ['日期','類型','大類','子類別','來源／附註','付款方式','信用卡名稱','金額'];
+  const rows = periodRecords.map(r=>[
+    r.date,
+    r.type==='income' ? '收入' : '支出',
+    r.category,
+    r.subCategory || '',
+    r.type==='income' ? (r.source||'') : (r.note||''),
+    r.payment  || '',
+    r.cardName || '',
+    r.amount,
+  ]);
+
+  const csv  = [header, ...rows]
+    .map(row => row.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(','))
+    .join('\r\n');
+  const blob = new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8;'});
+  const url  = URL.createObjectURL(blob);
+  const now  = new Date();
+  const stamp= `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}`;
+  const a = document.createElement('a');
+  a.href=url; a.download=`jizhangben_period_${stamp}.csv`;
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast(`✅ 已下載區間資料 CSV`);
+}
+
+// ═══════════════════════════════════════════════════
+// DELETE ALL
+// ═══════════════════════════════════════════════════
+function confirmDeleteAll() {
+  showModal('⚠️ 刪除帳本', `
+    <div style="color:var(--text-dim);font-size:14px;margin-bottom:20px;line-height:1.8">
+      將完全清除所有紀錄，<br>此操作<strong style="color:var(--expense)">無法復原</strong>，請確認。
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-secondary" onclick="hideModal()">取消清除</button>
+      <button class="btn" style="background:var(--expense);color:#fff"
+        onclick="deleteAllRecords()">確定清除</button>
+    </div>`);
+}
+
+async function deleteAllRecords() {
+  hideModal();
+  records = [];
+  try {
+    await saveData();
+    showToast('✅ 所有紀錄已清除');
+  } catch(e) {
+    showToast('清除失敗：'+e.message);
+  }
+  showPage('page-home');
+}
+
+// ═══════════════════════════════════════════════════
+// EXPORT CSV (direct browser download)
+// ═══════════════════════════════════════════════════
+function exportToCSV() {
+  if(!records.length) { showToast('目前沒有任何紀錄可匯出'); return; }
+
+  const header = ['日期','類型','大類','子類別','來源／附註','付款方式','信用卡名稱','金額'];
+  const rows = [...records]
+    .sort((a,b)=> a.date.localeCompare(b.date) || a.createdAt-b.createdAt)
+    .map(r=>[
+      r.date,
+      r.type==='income' ? '收入' : '支出',
+      r.category,
+      r.subCategory || '',
+      r.type==='income' ? (r.source||'') : (r.note||''),
+      r.payment  || '',
+      r.cardName || '',
+      r.amount,
+    ]);
+
+  const csv = [header, ...rows]
+    .map(row => row.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(','))
+    .join('\r\n');
+
+  const bom  = '\uFEFF'; // UTF-8 BOM for Excel Chinese support
+  const blob = new Blob([bom+csv], {type:'text/csv;charset=utf-8;'});
+  const url  = URL.createObjectURL(blob);
+
+  const now   = new Date();
+  const stamp = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}`;
+  const a = document.createElement('a');
+  a.href = url; a.download = `jizhangben_export_${stamp}.csv`;
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+
+  showToast(`✅ 已下載：jizhangben_export_${stamp}.csv`);
+  setTimeout(()=>showPage('page-home'), 1200);
+}
+
+// ═══════════════════════════════════════════════════
+// SETTINGS
+// ═══════════════════════════════════════════════════
+function sc() { return document.getElementById('settings-content'); }
+
+function renderSettingsMain() {
+  sc().innerHTML = `
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <button class="period-btn" onclick="renderIncomeSettings()">1. 編輯收入分類</button>
+      <button class="period-btn" onclick="renderExpenseSettings()">2. 編輯支出分類</button>
+    </div>`;
+}
+
+// ─── shared helpers ───
+function settingsCancelBtn(fn='renderSettingsMain') {
+  return `<div class="bottom-bar"><button class="btn btn-secondary" onclick="${fn}()">取消返回</button></div>`;
+}
+function inputRow(id, placeholder='最多8字元') {
+  return `<input class="form-input" id="${id}" type="text" maxlength="8" placeholder="${placeholder}" style="margin-top:10px">`;
+}
+function selectEl(id, options, onchange='') {
+  return `<div class="form-select-wrap"><select class="form-select" id="${id}" ${onchange?`onchange="${onchange}"`:''}>${
+    options.map(o=>`<option value="${o}">${o}</option>`).join('')
+  }</select></div>`;
+}
+
+// ════════════════════════════
+// INCOME SETTINGS
+// ════════════════════════════
+// Protected categories that cannot be renamed or deleted
+const PROTECTED_INCOME_CATS = ['投資'];
+
+function renderIncomeSettings() {
+  sc().innerHTML = `
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <button class="period-btn" onclick="incomeAddUI()">1. 新增收入分類</button>
+      <button class="period-btn" onclick="incomeRenameUI()">2. 編輯收入分類名稱</button>
+      <button class="period-btn" onclick="incomeDeleteUI()">3. 刪除收入分類</button>
+    </div>
+    ${settingsCancelBtn('renderSettingsMain')}`;
+}
+
+// ── Income Add ──
+function incomeAddUI() {
+  // For 投資: add sub-cat. For others: add flat cat.
+  sc().innerHTML = `
+    <div class="form-group">
+      <div class="form-label">新分類名稱 <span style="color:var(--text-dimmer)">(最多8字，不可空白)</span></div>
+      ${inputRow('inc-add-input','輸入新分類名稱')}
+    </div>
+    <div class="form-group" style="margin-top:16px">
+      <div class="form-label">新增為</div>
+      <div class="cat-chips" style="margin-top:8px">
+        <div class="cat-chip active" id="inc-add-type-main" onclick="incomeAddTypeSelect('main')">一般大分類</div>
+        <div class="cat-chip"       id="inc-add-type-sub"  onclick="incomeAddTypeSelect('sub')">投資子分類</div>
+      </div>
+    </div>
+    <div style="margin-top:20px">
+      <button class="btn btn-primary" onclick="incomeAddConfirm()">確認新增</button>
+    </div>
+    ${settingsCancelBtn('renderIncomeSettings')}`;
+}
+
+function incomeAddTypeSelect(type) {
+  document.getElementById('inc-add-type-main').classList.toggle('active', type==='main');
+  document.getElementById('inc-add-type-sub').classList.toggle('active',  type==='sub');
+}
+
+function incomeAddConfirm() {
+  const val    = document.getElementById('inc-add-input').value.trim();
+  const isSub  = document.getElementById('inc-add-type-sub').classList.contains('active');
+  if(!val) { showToast('名稱不可空白'); return; }
+  if(isSub) {
+    if(INCOME_INVEST_CATS.includes(val)) { showToast('此投資子分類已存在'); return; }
+    INCOME_INVEST_CATS.push(val);
+    saveCategories();
+    showToast(`✅ 已在投資下新增子分類「${val}」`);
+  } else {
+    if(INCOME_CATS.includes(val) || val===INVEST_CAT) { showToast('此分類已存在'); return; }
+    INCOME_CATS.push(val);
+    saveCategories();
+    showToast(`✅ 已新增收入分類「${val}」`);
+  }
+  renderIncomeSettings();
+}
+
+// ── Income Rename ──
+function incomeRenameUI() {
+  // Renameable: flat cats (excluding protected) + 投資 sub-cats
+  const flatCats = INCOME_CATS.filter(c=>!PROTECTED_INCOME_CATS.includes(c));
+  const mainList = ['不更改', ...flatCats, INVEST_CAT];
+  sc().innerHTML = `
+    <div class="form-group">
+      <div class="form-label">大分類（選「投資」可修改其子分類；選「不更改」表示改子分類）</div>
+      <div style="margin-top:8px">${selectEl('inc-ren-main', mainList, 'incomeRenameUpdateSub()')}</div>
+    </div>
+    <div id="inc-ren-sub-wrap" style="display:none;margin-top:14px">
+      <div class="form-label">投資子分類（選「不更改」表示改大分類名稱）</div>
+      <div style="margin-top:8px" id="inc-ren-sub-sel-wrap"></div>
+    </div>
+    <div class="form-group" style="margin-top:16px">
+      <div class="form-label">更新名稱 <span style="color:var(--text-dimmer)">(最多8字，不可空白)</span></div>
+      ${inputRow('inc-ren-input','輸入新名稱')}
+    </div>
+    <div style="margin-top:16px">
+      <button class="btn btn-primary" onclick="incomeRenameConfirm()">確認修改</button>
+    </div>
+    ${settingsCancelBtn('renderIncomeSettings')}`;
+}
+
+function incomeRenameUpdateSub() {
+  const main = document.getElementById('inc-ren-main').value;
+  const wrap = document.getElementById('inc-ren-sub-wrap');
+  const selWrap = document.getElementById('inc-ren-sub-sel-wrap');
+  if(main === INVEST_CAT) {
+    const subList = ['不更改', ...INCOME_INVEST_CATS];
+    selWrap.innerHTML = selectEl('inc-ren-sub', subList);
+    wrap.style.display = 'block';
+  } else {
+    wrap.style.display = 'none';
+  }
+}
+
+function incomeRenameConfirm() {
+  const main    = document.getElementById('inc-ren-main').value;
+  const subEl   = document.getElementById('inc-ren-sub');
+  const sub     = subEl ? subEl.value : '不更改';
+  const newName = document.getElementById('inc-ren-input').value.trim();
+  if(!newName) { showToast('名稱不可空白'); return; }
+  if(main==='不更改' && sub==='不更改') { showToast('請選擇要修改的分類'); return; }
+
+  if(main===INVEST_CAT && sub!=='不更改') {
+    // Rename invest sub-cat
+    const idx = INCOME_INVEST_CATS.indexOf(sub);
+    if(idx<0) { showToast('找不到該子分類'); return; }
+    if(INCOME_INVEST_CATS.includes(newName) && newName!==sub) { showToast('此名稱已存在'); return; }
+    INCOME_INVEST_CATS[idx] = newName;
+    saveCategories();
+    showToast(`✅ 投資子分類「${sub}」改為「${newName}」`);
+  } else if(main!=='不更改' && main!==INVEST_CAT) {
+    // Rename flat income cat
+    if(PROTECTED_INCOME_CATS.includes(main)) { showToast(`「${main}」分類不可編輯或刪除`); return; }
+    if((INCOME_CATS.includes(newName)||newName===INVEST_CAT) && newName!==main) { showToast('此名稱已存在'); return; }
+    const idx = INCOME_CATS.indexOf(main);
+    if(idx>=0) INCOME_CATS[idx] = newName;
+    saveCategories();
+    showToast(`✅ 「${main}」改為「${newName}」`);
+  } else {
+    showToast('請選擇有效的分類組合'); return;
+  }
+  renderIncomeSettings();
+}
+
+// ── Income Delete ──
+function incomeDeleteUI() {
+  const flatCats = INCOME_CATS.filter(c=>!PROTECTED_INCOME_CATS.includes(c));
+  const mainList = ['不更改', ...flatCats, INVEST_CAT];
+  sc().innerHTML = `
+    <div class="form-group">
+      <div class="form-label">大分類（選「投資」可刪除其子分類；選「不更改」表示刪子分類）</div>
+      <div style="margin-top:8px">${selectEl('inc-del-main', mainList, 'incomeDeleteUpdateSub()')}</div>
+    </div>
+    <div id="inc-del-sub-wrap" style="display:none;margin-top:14px">
+      <div class="form-label">投資子分類（選「不更改」表示刪大分類）</div>
+      <div style="margin-top:8px" id="inc-del-sub-sel-wrap"></div>
+    </div>
+    <div style="margin-top:20px">
+      <button class="btn" style="background:var(--expense);color:#fff" onclick="incomeDeleteConfirm()">確認刪除</button>
+    </div>
+    ${settingsCancelBtn('renderIncomeSettings')}`;
+}
+
+function incomeDeleteUpdateSub() {
+  const main = document.getElementById('inc-del-main').value;
+  const wrap = document.getElementById('inc-del-sub-wrap');
+  const selWrap = document.getElementById('inc-del-sub-sel-wrap');
+  if(main===INVEST_CAT) {
+    const subList = ['不更改', ...INCOME_INVEST_CATS];
+    selWrap.innerHTML = selectEl('inc-del-sub', subList);
+    wrap.style.display = 'block';
+  } else {
+    wrap.style.display = 'none';
+  }
+}
+
+function incomeDeleteConfirm() {
+  const main  = document.getElementById('inc-del-main').value;
+  const subEl = document.getElementById('inc-del-sub');
+  const sub   = subEl ? subEl.value : '不更改';
+  if(main==='不更改' && sub==='不更改') { showToast('請選擇要刪除的分類'); return; }
+
+  if(main===INVEST_CAT && sub!=='不更改') {
+    // Delete invest sub-cat — no minimum limit
+    showModal(`確認刪除投資子分類「${sub}」？`, `
+      <div style="color:var(--text-dim);font-size:14px;margin-bottom:16px">不影響已紀錄資料。</div>
+      <div class="btn-row">
+        <button class="btn btn-secondary" onclick="hideModal()">取消</button>
+        <button class="btn" style="background:var(--expense);color:#fff"
+          onclick="incomeDeleteExecute('invest-sub','${sub}')">確認</button>
+      </div>`);
+  } else if(main!=='不更改' && main!==INVEST_CAT) {
+    // Delete flat income cat
+    if(PROTECTED_INCOME_CATS.includes(main)) { showToast(`「${main}」分類不可編輯或刪除`); return; }
+    const deletable = INCOME_CATS.filter(c=>!PROTECTED_INCOME_CATS.includes(c));
+    if(deletable.length <= 1) { showToast('⚠️ 僅剩一分類，不可刪除'); return; }
+    showModal(`確認刪除收入分類「${main}」？`, `
+      <div style="color:var(--text-dim);font-size:14px;margin-bottom:16px">不影響已紀錄資料。</div>
+      <div class="btn-row">
+        <button class="btn btn-secondary" onclick="hideModal()">取消</button>
+        <button class="btn" style="background:var(--expense);color:#fff"
+          onclick="incomeDeleteExecute('flat','${main}')">確認</button>
+      </div>`);
+  } else {
+    showToast('請選擇有效的分類組合');
+  }
+}
+
+function incomeDeleteExecute(mode, name) {
+  hideModal();
+  if(mode==='invest-sub') {
+    INCOME_INVEST_CATS = INCOME_INVEST_CATS.filter(s=>s!==name);
+    showToast(`✅ 已刪除投資子分類「${name}」`);
+  } else {
+    INCOME_CATS = INCOME_CATS.filter(c=>c!==name);
+    showToast(`✅ 已刪除收入分類「${name}」`);
+  }
+  saveCategories();
+  renderIncomeSettings();
+}
+
+// ════════════════════════════
+// EXPENSE SETTINGS
+// ════════════════════════════
+function renderExpenseSettings() {
+  sc().innerHTML = `
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <button class="period-btn" onclick="expenseAddUI()">1. 新增支出分類</button>
+      <button class="period-btn" onclick="expenseRenameUI()">2. 編輯支出分類名稱</button>
+      <button class="period-btn" onclick="expenseDeleteUI()">3. 刪除支出分類</button>
+    </div>
+    ${settingsCancelBtn('renderSettingsMain')}`;
+}
+
+// ── Expense Add ──
+function expenseAddUI() {
+  const mainList = Object.keys(EXPENSE_CATS);
+  sc().innerHTML = `
+    <div class="form-group">
+      <div class="form-label">新分類名稱 <span style="color:var(--text-dimmer)">(最多8字，不可空白)</span></div>
+      ${inputRow('exp-add-input','輸入新分類名稱')}
+    </div>
+    <div class="form-group" style="margin-top:16px">
+      <div class="form-label">新增為</div>
+      <div class="cat-chips" style="margin-top:8px">
+        <div class="cat-chip active" id="exp-add-type-main" onclick="expenseAddTypeSelect('main')">大分類</div>
+        <div class="cat-chip"       id="exp-add-type-sub"  onclick="expenseAddTypeSelect('sub')">小分類</div>
+      </div>
+    </div>
+    <div id="exp-add-parent-wrap" style="display:none;margin-top:14px">
+      <div class="form-label">所屬大分類</div>
+      <div style="margin-top:8px">${selectEl('exp-add-parent', mainList)}</div>
+    </div>
+    <div style="margin-top:20px">
+      <button class="btn btn-primary" onclick="expenseAddConfirm()">確認新增</button>
+    </div>
+    ${settingsCancelBtn('renderExpenseSettings')}`;
+}
+
+function expenseAddTypeSelect(type) {
+  document.getElementById('exp-add-type-main').classList.toggle('active', type==='main');
+  document.getElementById('exp-add-type-sub').classList.toggle('active',  type==='sub');
+  document.getElementById('exp-add-parent-wrap').style.display = type==='sub' ? 'block' : 'none';
+}
+
+function expenseAddConfirm() {
+  const val  = document.getElementById('exp-add-input').value.trim();
+  if(!val) { showToast('名稱不可空白'); return; }
+  const isMain = document.getElementById('exp-add-type-main').classList.contains('active');
+  if(isMain) {
+    if(EXPENSE_CATS[val] !== undefined) { showToast('此大分類已存在'); return; }
+    EXPENSE_CATS[val] = ['其他'];
+    saveCategories();
+    showToast(`✅ 已新增支出大分類「${val}」`);
+  } else {
+    const parent = document.getElementById('exp-add-parent').value;
+    if(!EXPENSE_CATS[parent]) { showToast('找不到所屬大分類'); return; }
+    if(EXPENSE_CATS[parent].includes(val)) { showToast('此小分類已存在'); return; }
+    EXPENSE_CATS[parent].push(val);
+    saveCategories();
+    showToast(`✅ 已在「${parent}」下新增小分類「${val}」`);
+  }
+  renderExpenseSettings();
+}
+
+// ── Expense Rename ──
+function expenseRenameUI() {
+  const mainList = ['不更改', ...Object.keys(EXPENSE_CATS)];
+  sc().innerHTML = `
+    <div class="form-group">
+      <div class="form-label">大分類（選「不更改」表示修改小分類）</div>
+      <div style="margin-top:8px">${selectEl('exp-ren-main', mainList, 'expenseRenameUpdateSub()')}</div>
+    </div>
+    <div id="exp-ren-sub-wrap" style="display:none;margin-top:14px">
+      <div class="form-label">小分類（選「不更改」表示修改大分類）</div>
+      <div style="margin-top:8px" id="exp-ren-sub-sel-wrap"></div>
+    </div>
+    <div class="form-group" style="margin-top:16px">
+      <div class="form-label">更新名稱 <span style="color:var(--text-dimmer)">(最多8字，不可空白)</span></div>
+      ${inputRow('exp-ren-input','輸入新名稱')}
+    </div>
+    <div style="margin-top:16px">
+      <button class="btn btn-primary" onclick="expenseRenameConfirm()">確認修改</button>
+    </div>
+    ${settingsCancelBtn('renderExpenseSettings')}`;
+}
+
+function expenseRenameUpdateSub() {
+  const main = document.getElementById('exp-ren-main').value;
+  const wrap = document.getElementById('exp-ren-sub-wrap');
+  const selWrap = document.getElementById('exp-ren-sub-sel-wrap');
+  if(main === '不更改' || !EXPENSE_CATS[main]) {
+    wrap.style.display = 'none'; return;
+  }
+  const subList = ['不更改', ...EXPENSE_CATS[main]];
+  selWrap.innerHTML = selectEl('exp-ren-sub', subList);
+  wrap.style.display = 'block';
+}
+
+function expenseRenameConfirm() {
+  const main    = document.getElementById('exp-ren-main').value;
+  const subEl   = document.getElementById('exp-ren-sub');
+  const sub     = subEl ? subEl.value : '不更改';
+  const newName = document.getElementById('exp-ren-input').value.trim();
+
+  if(!newName) { showToast('名稱不可空白'); return; }
+  if(main==='不更改' && sub==='不更改') { showToast('請至少選擇一個要修改的分類'); return; }
+
+  if(main!=='不更改' && sub==='不更改') {
+    // Rename main category
+    if(main===INVEST_CAT) { showToast(`「${INVEST_CAT}」分類不可編輯或刪除`); return; }
+    if(Object.keys(EXPENSE_CATS).includes(newName) && newName!==main) { showToast('此大分類名稱已存在'); return; }
+    const subs = EXPENSE_CATS[main];
+    delete EXPENSE_CATS[main];
+    // Rebuild to preserve key order
+    const newObj = {};
+    Object.keys(EXPENSE_CATS).forEach(k=>newObj[k]=EXPENSE_CATS[k]);
+    // Re-insert with new name — just assign
+    EXPENSE_CATS[newName] = subs;
+    saveCategories();
+    showToast(`✅ 大分類「${main}」改為「${newName}」`);
+  } else {
+    // Rename sub category
+    const idx = EXPENSE_CATS[main].indexOf(sub);
+    if(idx < 0) { showToast('找不到該小分類'); return; }
+    if(EXPENSE_CATS[main].includes(newName) && newName!==sub) { showToast('此小分類名稱已存在'); return; }
+    EXPENSE_CATS[main][idx] = newName;
+    saveCategories();
+    showToast(`✅ 小分類「${sub}」改為「${newName}」`);
+  }
+  renderExpenseSettings();
+}
+
+// ── Expense Delete ──
+function expenseDeleteUI() {
+  const mainList = ['不更改', ...Object.keys(EXPENSE_CATS)];
+  sc().innerHTML = `
+    <div class="form-group">
+      <div class="form-label">大分類（選「不更改」表示刪除小分類）</div>
+      <div style="margin-top:8px">${selectEl('exp-del-main', mainList, 'expenseDeleteUpdateSub()')}</div>
+    </div>
+    <div id="exp-del-sub-wrap" style="display:none;margin-top:14px">
+      <div class="form-label">小分類（選「不更改」表示刪除大分類）</div>
+      <div style="margin-top:8px" id="exp-del-sub-sel-wrap"></div>
+    </div>
+    <div style="margin-top:20px">
+      <button class="btn" style="background:var(--expense);color:#fff" onclick="expenseDeleteConfirm()">確認刪除</button>
+    </div>
+    ${settingsCancelBtn('renderExpenseSettings')}`;
+}
+
+function expenseDeleteUpdateSub() {
+  const main = document.getElementById('exp-del-main').value;
+  const wrap = document.getElementById('exp-del-sub-wrap');
+  const selWrap = document.getElementById('exp-del-sub-sel-wrap');
+  if(main==='不更改' || !EXPENSE_CATS[main]) { wrap.style.display='none'; return; }
+  const subList = ['不更改', ...EXPENSE_CATS[main]];
+  selWrap.innerHTML = selectEl('exp-del-sub', subList);
+  wrap.style.display = 'block';
+}
+
+function expenseDeleteConfirm() {
+  const main  = document.getElementById('exp-del-main').value;
+  const subEl = document.getElementById('exp-del-sub');
+  const sub   = subEl ? subEl.value : '不更改';
+
+  if(main==='不更改' && sub==='不更改') { showToast('請至少選擇一個要刪除的分類'); return; }
+
+  if(main!=='不更改' && sub==='不更改') {
+    // Delete main category + all its subs
+    if(main===INVEST_CAT) { showToast(`「${INVEST_CAT}」分類不可編輯或刪除`); return; }
+    const mainKeys = Object.keys(EXPENSE_CATS);
+    if(mainKeys.length <= 1) { showToast('⚠️ 僅剩一分類，不可刪除'); return; }
+    showModal(`確認刪除大分類「${main}」？`, `
+      <div style="color:var(--text-dim);font-size:14px;margin-bottom:16px">
+        將連帶刪除其下所有小分類，<br>不影響已紀錄資料。
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-secondary" onclick="hideModal()">取消</button>
+        <button class="btn" style="background:var(--expense);color:#fff"
+          onclick="expenseDeleteExecute('${main}','')">確認</button>
+      </div>`);
+  } else {
+    // Delete sub category — no minimum limit
+    showModal(`確認刪除「${main}」下的「${sub}」？`, `
+      <div style="color:var(--text-dim);font-size:14px;margin-bottom:16px">不影響已紀錄資料。</div>
+      <div class="btn-row">
+        <button class="btn btn-secondary" onclick="hideModal()">取消</button>
+        <button class="btn" style="background:var(--expense);color:#fff"
+          onclick="expenseDeleteExecute('${main}','${sub}')">確認</button>
+      </div>`);
+  }
+}
+
+function expenseDeleteExecute(main, sub) {
+  hideModal();
+  if(!sub) {
+    delete EXPENSE_CATS[main];
+    showToast(`✅ 已刪除大分類「${main}」及其所有小分類`);
+  } else {
+    EXPENSE_CATS[main] = EXPENSE_CATS[main].filter(s=>s!==sub);
+    showToast(`✅ 已刪除小分類「${sub}」`);
+  }
+  saveCategories();
+  renderExpenseSettings();
+}
+
+// ═══════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════
+window.addEventListener('load', () => {
+  let waited = 0;
+  const check = setInterval(()=>{
+    waited += 100;
+    if(window.google && google.accounts) {
+      clearInterval(check);
+      initGoogleAuth();
+    } else if(waited >= 8000) {
+      clearInterval(check);
+      // GSI script failed to load — show manual button fallback
+      document.getElementById('g-signin-btn').innerHTML = `
+        <div style="text-align:center">
+          <div style="color:var(--expense);font-size:13px;margin-bottom:12px">
+            ⚠️ Google 登入腳本載入失敗<br>
+            <span style="color:var(--text-dimmer);font-size:11px">請確認網路連線後重新整理頁面</span>
+          </div>
+          <button onclick="location.reload()" style="
+            background:var(--accent);color:var(--bg);border:none;
+            border-radius:8px;padding:12px 24px;font-size:14px;
+            font-weight:700;cursor:pointer;font-family:inherit">
+            🔄 重新整理
+          </button>
+        </div>`;
+    }
+  }, 100);
+});
+</script>
+</body>
+</html>
