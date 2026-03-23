@@ -458,11 +458,48 @@ let driveFileId      = null;
 // ═══════════════════════════════════════════════════
 let tokenClient;
 
+const SESSION_TOKEN_KEY    = 'jzb_access_token';
+const SESSION_USERINFO_KEY = 'jzb_user_info';
+const SESSION_EXPIRY_KEY   = 'jzb_token_expiry';
+
+function saveSession(token, user) {
+  const expiry = Date.now() + 55 * 60 * 1000; // 55 minutes
+  sessionStorage.setItem(SESSION_TOKEN_KEY,    token);
+  sessionStorage.setItem(SESSION_USERINFO_KEY, JSON.stringify(user));
+  sessionStorage.setItem(SESSION_EXPIRY_KEY,   String(expiry));
+}
+
+function loadSession() {
+  const token  = sessionStorage.getItem(SESSION_TOKEN_KEY);
+  const expiry = Number(sessionStorage.getItem(SESSION_EXPIRY_KEY)||0);
+  const user   = sessionStorage.getItem(SESSION_USERINFO_KEY);
+  if(token && expiry > Date.now() && user) {
+    return { token, user: JSON.parse(user) };
+  }
+  return null;
+}
+
+function clearSession() {
+  sessionStorage.removeItem(SESSION_TOKEN_KEY);
+  sessionStorage.removeItem(SESSION_USERINFO_KEY);
+  sessionStorage.removeItem(SESSION_EXPIRY_KEY);
+}
+
 function initGoogleAuth() {
+  // Try restoring session first
+  const session = loadSession();
+  if(session) {
+    accessToken = session.token;
+    userInfo    = session.user;
+    loadDriveData().then(()=> showPage('page-home'))
+      .catch(()=>{ clearSession(); /* token expired, fall through to login */ });
+    return;
+  }
+
   google.accounts.id.initialize({
     client_id: CLIENT_ID,
     callback: handleCredential,
-    auto_select: false,
+    auto_select: true,
     error_callback: (err) => {
       console.error('GSI error:', err);
       document.getElementById('g-signin-btn').innerHTML = `
@@ -483,11 +520,14 @@ function initGoogleAuth() {
     callback: async (resp) => {
       if(resp.error) { showToast('授權失敗：'+resp.error); return; }
       accessToken = resp.access_token;
+      saveSession(accessToken, userInfo);
       showToast('⏳ 載入資料中…', 3000);
       await loadDriveData();
       showPage('page-home');
     },
   });
+  // Prompt one-tap if available
+  google.accounts.id.prompt();
 }
 
 async function handleCredential(resp) {
@@ -497,6 +537,7 @@ async function handleCredential(resp) {
 }
 
 function logout() {
+  clearSession();
   google.accounts.id.disableAutoSelect();
   accessToken = null; userInfo = null; driveFileId = null;
   records = []; cardNames = [];
