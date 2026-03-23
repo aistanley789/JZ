@@ -176,6 +176,10 @@
   .cat-chip.invest-chip { border-color: #2d6a2d; color: #6abf6a; }
   .cat-chip.invest-chip.active { background: #2d6a2d; color: #c8f5c8; border-color: #3a8a3a; }
 
+  /* Drill-down clickable rows */
+  .drill-row { border-radius: var(--radius-sm); transition: var(--transition); }
+  .drill-row:hover { background: var(--surface2); }
+
   /* ── Buttons ── */
   .btn {
     padding: 14px 20px; border-radius: var(--radius-sm);
@@ -740,6 +744,15 @@ function expenseFormHTML(rec=null) {
       <input type="hidden" id="expense-sub" value="${selSub}">
     </div>
     <div class="form-group">
+      <div class="form-label">附註 <span style="color:var(--text-dimmer)">(選填，最多10字)</span></div>
+      <input class="form-input" id="expense-note" type="text" maxlength="10"
+        placeholder="備註說明…" value="${rec ? (rec.note||'') : ''}">
+    </div>
+    <div class="form-group">
+      <div class="form-label">日期 <span style="color:var(--text-dimmer)">(未填自動帶入今天)</span></div>
+      <input class="form-input" id="expense-date" type="date" value="${dateVal}">
+    </div>
+    <div class="form-group">
       <div class="form-label">付款方式</div>
       <div class="pay-row">
         <div class="pay-chips">
@@ -756,15 +769,6 @@ function expenseFormHTML(rec=null) {
         </div>
       </div>
       <input type="hidden" id="expense-payment" value="${selPay}">
-    </div>
-    <div class="form-group">
-      <div class="form-label">附註 <span style="color:var(--text-dimmer)">(選填，最多10字)</span></div>
-      <input class="form-input" id="expense-note" type="text" maxlength="10"
-        placeholder="備註說明…" value="${rec ? (rec.note||'') : ''}">
-    </div>
-    <div class="form-group">
-      <div class="form-label">日期 <span style="color:var(--text-dimmer)">(未填自動帶入今天)</span></div>
-      <input class="form-input" id="expense-date" type="date" value="${dateVal}">
     </div>
     <div class="form-group">
       <div class="form-label">金額 <span style="color:var(--expense)">*</span></div>
@@ -1256,14 +1260,17 @@ function calcSummary(from, to) {
           incomeByCat, expenseByCat, expenseByCard};
 }
 
-// Build a detail breakdown section
-function breakdownHTML(title, map, colorClass, prefix) {
+// Build a detail breakdown section with clickable rows
+function breakdownHTML(title, map, colorClass, prefix, from, to, drillType) {
   const entries = Object.entries(map).sort((a,b)=>b[1]-a[1]);
   if(!entries.length) return '';
   const total = entries.reduce((s,[,v])=>s+v, 0);
+  const days  = Math.round((new Date(to) - new Date(from)) / 86400000) + 1;
+  const clickable = days <= 180;
   const rows = entries.map(([k,v])=>`
-    <div class="summary-row" style="padding-left:8px">
-      <div class="summary-row-label" style="font-size:13px">${k}</div>
+    <div class="summary-row${clickable?' drill-row':''}" style="padding-left:8px${clickable?';cursor:pointer':''}"
+      ${clickable ? `onclick="drillDown('${drillType}','${k.replace(/'/g,"\\'")}',${new Date(from).getTime()},${new Date(to).getTime()})"` : ''}>
+      <div class="summary-row-label" style="font-size:13px">${k}${clickable?` <span style="color:var(--text-dimmer);font-size:10px">▶</span>`:''}</div>
       <div class="summary-row-value ${colorClass}" style="font-size:13px">${prefix}${fmt(v)}</div>
     </div>`).join('');
   return `
@@ -1281,8 +1288,8 @@ function breakdownHTML(title, map, colorClass, prefix) {
 }
 
 // Store current period for export
-let currentSummaryFrom = null;
-let currentSummaryTo   = null;
+let currentSummaryFrom  = null;
+let currentSummaryTo    = null;
 let currentSummaryLabel = '';
 
 function summaryCardHTML(label, from, to) {
@@ -1295,28 +1302,34 @@ function summaryCardHTML(label, from, to) {
   if(!hasRegular && !hasInvest)
     return `<div class="empty-state"><div class="empty-icon">📭</div>該期間無資料</div>`;
 
-  // Store for export
   currentSummaryFrom  = from;
   currentSummaryTo    = to;
   currentSummaryLabel = label;
 
+  const days       = Math.round((new Date(to) - new Date(from)) / 86400000) + 1;
+  const clickable  = days <= 180;
   const flowClass  = flow>0?'positive':flow<0?'negative':'neutral';
   const flowPrefix = flow>0?'+':'';
 
-  // Investment block
+  // Investment block — clickable rows for invest-income / invest-expense
   const investReturn  = investIncome - investExpense;
   const iReturnClass  = investReturn>0?'positive':investReturn<0?'negative':'neutral';
   const iReturnPrefix = investReturn>0?'+':'';
+  const fromT = new Date(from).getTime();
+  const toT   = new Date(to).getTime();
+
   const investBlock = hasInvest ? `
   <div class="summary-card" style="margin-top:12px;border-color:#2a3a1a">
     <div class="summary-period" style="color:#a8d444">📈 投資統整</div>
     <div class="summary-rows">
-      <div class="summary-row" style="padding-left:8px">
-        <div class="summary-row-label" style="font-size:13px">投資收入</div>
+      <div class="summary-row${clickable?' drill-row':''}" style="padding-left:8px${clickable?';cursor:pointer':''}"
+        ${clickable?`onclick="drillDown('invest-income','投資',${fromT},${toT})"`:''}>
+        <div class="summary-row-label" style="font-size:13px">投資收入${clickable?` <span style="color:var(--text-dimmer);font-size:10px">▶</span>`:''}</div>
         <div class="summary-row-value positive" style="font-size:13px">+${fmt(investIncome)}</div>
       </div>
-      <div class="summary-row" style="padding-left:8px">
-        <div class="summary-row-label" style="font-size:13px">投資支出</div>
+      <div class="summary-row${clickable?' drill-row':''}" style="padding-left:8px${clickable?';cursor:pointer':''}"
+        ${clickable?`onclick="drillDown('invest-expense','投資',${fromT},${toT})"`:''}>
+        <div class="summary-row-label" style="font-size:13px">投資支出${clickable?` <span style="color:var(--text-dimmer);font-size:10px">▶</span>`:''}</div>
         <div class="summary-row-value negative" style="font-size:13px">-${fmt(investExpense)}</div>
       </div>
       <hr class="summary-divider">
@@ -1327,10 +1340,12 @@ function summaryCardHTML(label, from, to) {
     </div>
   </div>` : '';
 
-  const incomeBreakdown  = hasRegular ? breakdownHTML('💰 收入細項（依大類）', incomeByCat,  'positive', '+') : '';
-  const expenseBreakdown = hasRegular ? breakdownHTML('💸 支出細項（依大類）', expenseByCat, 'negative', '-') : '';
+  const incomeBreakdown  = hasRegular
+    ? breakdownHTML('💰 收入細項（依大類）', incomeByCat,  'positive', '+', from, to, 'income-cat') : '';
+  const expenseBreakdown = hasRegular
+    ? breakdownHTML('💸 支出細項（依大類）', expenseByCat, 'negative', '-', from, to, 'expense-cat') : '';
   const cardBreakdown    = Object.keys(expenseByCard).length
-    ? breakdownHTML('💳 信用卡支出（依卡別）', expenseByCard, 'negative', '-') : '';
+    ? breakdownHTML('💳 信用卡支出（依卡別）', expenseByCard, 'negative', '-', from, to, 'card') : '';
 
   const mainBlock = hasRegular ? `
   <div class="summary-card">
@@ -1364,6 +1379,151 @@ function summaryCardHTML(label, from, to) {
       📤 匯出此時間段資料
     </button>
   </div>`;
+}
+
+// ── Drill-down logic ──
+// drillType: 'income-cat' | 'expense-cat' | 'card' | 'invest-income' | 'invest-expense'
+function drillDown(drillType, key, fromT, toT) {
+  const from  = new Date(fromT);
+  const to    = new Date(toT);
+  const days  = Math.round((toT - fromT) / 86400000) + 1;
+
+  if(days <= 180) {
+    showDrillDetail(drillType, key, from, to, null);
+  } else {
+    showDrillMonths(drillType, key, from, to);
+  }
+}
+
+// Filter records by drillType + key + date range
+function filterDrillRecords(drillType, key, fromT, toT) {
+  const fromD = new Date(fromT); fromD.setHours(0,0,0,0);
+  const toD   = new Date(toT);   toD.setHours(23,59,59,999);
+  return records.filter(r => {
+    const d = parseRecordDate(r.date);
+    if(d < fromD || d > toD) return false;
+    if(drillType==='income-cat')    return r.type==='income' && r.category===key && r.category!==INVEST_CAT;
+    if(drillType==='expense-cat')   return r.type==='expense' && r.category===key && r.category!==INVEST_CAT;
+    if(drillType==='card')          return r.type==='expense' && r.payment==='信用卡' && (r.cardName||'（未命名）')===key;
+    if(drillType==='invest-income') return r.type==='income' && r.category===INVEST_CAT;
+    if(drillType==='invest-expense')return r.type==='expense' && r.category===INVEST_CAT;
+    return false;
+  });
+}
+
+function drillTypeLabel(drillType, key) {
+  if(drillType==='income-cat')     return `💰 ${key}`;
+  if(drillType==='expense-cat')    return `💸 ${key}`;
+  if(drillType==='card')           return `💳 ${key}`;
+  if(drillType==='invest-income')  return `📈 投資收入`;
+  if(drillType==='invest-expense') return `📈 投資支出`;
+  return key;
+}
+
+function drillColorClass(drillType) {
+  if(drillType==='income-cat'||drillType==='invest-income') return 'income';
+  return 'expense';
+}
+
+// Show individual record list for ≤180 days
+function showDrillDetail(drillType, key, from, to, monthLabel) {
+  const fromT = new Date(from).getTime();
+  const toT   = new Date(to).getTime();
+  const recs  = filterDrillRecords(drillType, key, fromT, toT)
+    .sort((a,b)=> b.date.localeCompare(a.date) || b.createdAt-a.createdAt);
+  const colorClass = drillColorClass(drillType);
+  const prefix     = colorClass==='income' ? '+' : '-';
+  const title      = drillTypeLabel(drillType, key) + (monthLabel ? ` — ${monthLabel}` : '');
+
+  const rows = recs.length ? recs.map(r=>`
+    <div class="record-item" style="cursor:default">
+      <div class="record-type-dot ${r.type}"></div>
+      <div class="record-info">
+        <div class="record-cat">${r.category}${r.subCategory?' ・ '+r.subCategory:''}
+          ${r.note?`<span style="color:var(--text-dimmer);font-weight:400"> ${r.note}</span>`:''}
+          ${r.source?`<span style="color:var(--text-dimmer);font-weight:400"> ${r.source}</span>`:''}
+        </div>
+        <div class="record-date">${r.date}${r.payment?' · '+r.payment+(r.cardName?' '+r.cardName:''):''}</div>
+      </div>
+      <div class="record-amount ${colorClass}">${prefix}${fmt(r.amount)}</div>
+    </div>`).join('')
+    : `<div class="empty-state"><div class="empty-icon">📭</div>無資料</div>`;
+
+  const total = recs.reduce((s,r)=>s+r.amount,0);
+  const totalHTML = recs.length ? `
+    <div style="padding:12px 0;display:flex;justify-content:space-between;border-top:1px solid var(--border);margin-top:4px">
+      <span style="color:var(--text-dim);font-size:13px">共 ${recs.length} 筆</span>
+      <span class="summary-row-value ${colorClass}" style="font-family:'DM Mono',monospace">${prefix}${fmt(total)}</span>
+    </div>` : '';
+
+  document.getElementById('book-content').innerHTML = `
+    <div class="page-header" style="margin-bottom:20px">
+      <div class="page-title" style="font-size:18px">${title}</div>
+    </div>
+    <div style="font-size:11px;color:var(--text-dimmer);margin-bottom:14px;font-family:'DM Mono',monospace">
+      ${fmtD(from)} ～ ${fmtD(to)}
+    </div>
+    <div class="records-list">${rows}</div>
+    ${totalHTML}
+    <div class="bottom-bar">
+      <button class="btn btn-secondary" onclick="history.go(-1)||renderBookPage()">返回上頁</button>
+    </div>`;
+}
+
+// Show month breakdown for >180 days
+function showDrillMonths(drillType, key, from, to) {
+  const fromT = new Date(from).getTime();
+  const toT   = new Date(to).getTime();
+  const recs  = filterDrillRecords(drillType, key, fromT, toT);
+
+  // Group by YYYY/MM
+  const byMonth = {};
+  recs.forEach(r=>{
+    const ym = r.date.slice(0,7); // "YYYY/MM"
+    byMonth[ym] = (byMonth[ym]||0) + r.amount;
+  });
+  const months = Object.keys(byMonth).sort().reverse();
+  const colorClass = drillColorClass(drillType);
+  const prefix     = colorClass==='income' ? '+' : '-';
+  const title      = drillTypeLabel(drillType, key);
+
+  const rows = months.length ? months.map(ym=>{
+    const [y,m] = ym.split('/');
+    const mFrom = new Date(Number(y), Number(m)-1, 1);
+    const mTo   = new Date(Number(y), Number(m), 0); // last day of month
+    // Clamp to original range
+    const clampFrom = mFrom < from ? from : mFrom;
+    const clampTo   = mTo   > to   ? to   : mTo;
+    return `
+    <div class="summary-row drill-row" style="cursor:pointer;padding:10px 0;border-bottom:1px solid var(--border)"
+      onclick="showDrillDetail('${drillType}','${key.replace(/'/g,"\\'")}',new Date(${clampFrom.getTime()}),new Date(${clampTo.getTime()}),'${y}年${m}月')">
+      <div class="summary-row-label">${y}年${Number(m)}月 <span style="color:var(--text-dimmer);font-size:10px">▶</span></div>
+      <div class="summary-row-value ${colorClass}" style="font-family:'DM Mono',monospace">${prefix}${fmt(byMonth[ym])}</div>
+    </div>`;
+  }).join('')
+  : `<div class="empty-state"><div class="empty-icon">📭</div>無資料</div>`;
+
+  const total = Object.values(byMonth).reduce((s,v)=>s+v,0);
+  const totalHTML = months.length ? `
+    <div style="padding:12px 0;display:flex;justify-content:space-between;margin-top:4px">
+      <span style="color:var(--text-dim);font-size:13px;font-weight:700">合計</span>
+      <span class="summary-row-value ${colorClass}" style="font-family:'DM Mono',monospace;font-weight:700">${prefix}${fmt(total)}</span>
+    </div>` : '';
+
+  document.getElementById('book-content').innerHTML = `
+    <div class="page-header" style="margin-bottom:20px">
+      <div class="page-title" style="font-size:18px">${title}</div>
+    </div>
+    <div style="font-size:11px;color:var(--text-dimmer);margin-bottom:14px;font-family:'DM Mono',monospace">
+      ${fmtD(from)} ～ ${fmtD(to)}（依月份）
+    </div>
+    <div class="summary-card">
+      <div class="summary-rows">${rows}</div>
+      ${totalHTML}
+    </div>
+    <div class="bottom-bar">
+      <button class="btn btn-secondary" onclick="renderBookPage()">返回上頁</button>
+    </div>`;
 }
 
 function exportPeriodCSV() {
