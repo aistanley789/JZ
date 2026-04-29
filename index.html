@@ -584,6 +584,15 @@ async function loadDriveData() {
 }
 
 async function saveData() {
+  // Safety check: never write empty records if Drive already has data
+  if(records.length === 0 && driveFileId) {
+    // Verify we actually intend to clear (deleteAllRecords sets a flag)
+    if(!window._intentionalClear) {
+      console.warn('saveData blocked: records is empty but driveFileId exists. Possible accidental overwrite.');
+      return;
+    }
+    window._intentionalClear = false;
+  }
   const body = JSON.stringify({
     records, cardNames,
     incomeCats: INCOME_CATS,
@@ -1667,6 +1676,7 @@ function confirmDeleteAll() {
 async function deleteAllRecords() {
   hideModal();
   records = [];
+  window._intentionalClear = true;
   try {
     await saveData();
     showToast('✅ 所有紀錄已清除');
