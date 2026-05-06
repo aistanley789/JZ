@@ -192,6 +192,7 @@
   .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
   .btn-secondary { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
   .btn-secondary:hover { border-color: var(--text-dim); }
+  .btn-secondary:disabled { opacity: 0.35; cursor: not-allowed; }
   .btn-back {
     display: flex; align-items: center; gap: 6px;
     background: none; border: none; color: var(--text-dim);
@@ -333,7 +334,7 @@
       <div class="user-bar">
         <div class="user-avatar" id="user-avatar">💰</div>
         <div class="user-name" id="user-name">使用者</div>
-        <span style="font-size:10px;color:var(--text-dimmer);font-family:'DM Mono',monospace;margin-right:6px">V01.00</span>
+        <span style="font-size:10px;color:var(--text-dimmer);font-family:'DM Mono',monospace;margin-right:6px">V01.01</span>
         <button class="btn-logout" onclick="logout()">登出</button>
       </div>
       <div class="home-greeting">今天是</div>
@@ -424,7 +425,7 @@ const FILE_NAME  = 'jizhangben_data.json';
 const INCOME_CATS_KEY        = 'incomeCats';
 const INCOME_INVEST_CATS_KEY = 'incomeInvestCats';
 const EXPENSE_CATS_KEY       = 'expenseCats';
-const CARD_NAMES_KEY         = 'cardNames';
+const INVEST_CAT             = '投資'; // protected category name
 
 const DEFAULT_INCOME_CATS        = ['薪資','獎金','贈與','交易','其他'];
 const DEFAULT_INCOME_INVEST_CATS = ['股票','基金','房地產','加密貨幣','其他'];
@@ -453,6 +454,8 @@ let cardNames        = [];
 let accessToken      = null;
 let userInfo         = null;
 let driveFileId      = null;
+let bookStack        = [];
+let drillState       = null;
 
 // ═══════════════════════════════════════════════════
 // GOOGLE AUTH
@@ -561,38 +564,40 @@ async function driveReq(url, opts={}) {
 async function loadDriveData() {
   try {
     const res  = await driveReq(
-      `https://www.googleapis.com/drive/v3/files?q=name='${FILE_NAME}'+and+trashed=false&fields=files(id)`
+      `https://www.googleapis.com/drive/v3/files?q=name='${FILE_NAME}'+and+trashed=false&fields=files(id,modifiedTime)&orderBy=modifiedTime+desc`
     );
     const data = await res.json();
     if(data.files && data.files.length > 0) {
+      // Use the most recently modified file
       driveFileId = data.files[0].id;
+      // If there are duplicates, delete the older ones
+      if(data.files.length > 1) {
+        for(let i=1; i<data.files.length; i++) {
+          driveReq(`https://www.googleapis.com/drive/v3/files/${data.files[i].id}`, {method:'DELETE'}).catch(()=>{});
+        }
+      }
       const fileRes = await driveReq(
         `https://www.googleapis.com/drive/v3/files/${driveFileId}?alt=media`
       );
       const json = await fileRes.json();
-      records          = json.records          || [];
-      cardNames        = json.cardNames        || [];
+      records            = json.records          || [];
+      cardNames          = json.cardNames        || [];
       INCOME_CATS        = json.incomeCats        || [...DEFAULT_INCOME_CATS];
       INCOME_INVEST_CATS = json.incomeInvestCats  || [...DEFAULT_INCOME_INVEST_CATS];
       EXPENSE_CATS       = json.expenseCats       || JSON.parse(JSON.stringify(DEFAULT_EXPENSE_CATS));
     } else {
       driveFileId = null;
     }
+    // Safety: ensure critical arrays are never empty
+    if(!INCOME_CATS.length)               INCOME_CATS        = [...DEFAULT_INCOME_CATS];
+    if(!INCOME_INVEST_CATS.length)        INCOME_INVEST_CATS = [...DEFAULT_INCOME_INVEST_CATS];
+    if(!Object.keys(EXPENSE_CATS).length) EXPENSE_CATS       = JSON.parse(JSON.stringify(DEFAULT_EXPENSE_CATS));
   } catch(e) {
     showToast('載入資料失敗：'+e.message);
   }
 }
 
 async function saveData() {
-  // Safety check: never write empty records if Drive already has data
-  if(records.length === 0 && driveFileId) {
-    // Verify we actually intend to clear (deleteAllRecords sets a flag)
-    if(!window._intentionalClear) {
-      console.warn('saveData blocked: records is empty but driveFileId exists. Possible accidental overwrite.');
-      return;
-    }
-    window._intentionalClear = false;
-  }
   const body = JSON.stringify({
     records, cardNames,
     incomeCats: INCOME_CATS,
@@ -1121,10 +1126,9 @@ function editRecord(id) {
 // ═══════════════════════════════════════════════════
 // BOOK PAGE
 // ═══════════════════════════════════════════════════
-let bookStack = []; // page stack for back navigation
-
 function renderBookPage() {
-  bookStack = [];
+  bookStack  = [];
+  drillState = null;
   document.getElementById('book-content').innerHTML = `
     <div class="period-grid">
       <button class="period-btn" onclick="showSummary('thisMonth')">本月</button>
@@ -1274,8 +1278,6 @@ function confirmCustomRange() {
     </div>`;
   bookRoot(html);
 }
-
-const INVEST_CAT = '投資';
 
 function calcSummary(from, to) {
   let income=0, expense=0;
@@ -1443,38 +1445,65 @@ function showDrillDetailFromMs(drillType, key, fromMs, toMs, monthLabel) {
   showDrillDetail(drillType, key, new Date(fromMs), new Date(toMs), monthLabel);
 }
 
-// Show individual records
+// Pagination constant
+const DRILL_PAGE_SIZE = 50;
+
+// Show individual records with pagination
 function showDrillDetail(drillType, key, from, to, monthLabel) {
   const recs       = filterDrillRecords(drillType, key, from, to)
     .sort((a,b)=> b.date.localeCompare(a.date) || b.createdAt-a.createdAt);
   const colorClass = drillColorClass(drillType);
   const prefix     = colorClass==='income' ? '+' : '-';
   const title      = drillTypeLabel(drillType, key) + (monthLabel ? ` — ${monthLabel}` : '');
+  const total      = recs.reduce((s,r)=>s+r.amount, 0);
 
-  const rows = recs.length ? recs.map(r => `
+  drillState = { recs, colorClass, prefix, title, from, to, total };
+  bookStack.push('__drill__');
+  renderDrillPage(0);
+}
+
+function renderDrillPage(page) {
+  if(!drillState) return;
+  const { recs, colorClass, prefix, title, from, to, total } = drillState;
+  const totalPages = Math.ceil(recs.length / DRILL_PAGE_SIZE) || 1;
+  page = Math.max(0, Math.min(page, totalPages-1));
+
+  const slice = recs.slice(page * DRILL_PAGE_SIZE, (page+1) * DRILL_PAGE_SIZE);
+
+  const rows = slice.length ? slice.map(r=>`
     <div class="record-item" style="cursor:default">
       <div class="record-type-dot ${r.type}"></div>
       <div class="record-info">
         <div class="record-cat">
-          ${r.category}${r.subCategory ? ' ・ '+r.subCategory : ''}
-          ${r.note   ? `<span style="color:var(--text-dimmer);font-weight:400"> ${r.note}</span>`   : ''}
-          ${r.source ? `<span style="color:var(--text-dimmer);font-weight:400"> ${r.source}</span>` : ''}
+          ${r.category}${r.subCategory?' ・ '+r.subCategory:''}
+          ${r.note  ?`<span style="color:var(--text-dimmer);font-weight:400"> ${r.note}</span>`:''}
+          ${r.source?`<span style="color:var(--text-dimmer);font-weight:400"> ${r.source}</span>`:''}
         </div>
         <div class="record-date">
-          ${r.date}${r.payment ? ' · '+r.payment+(r.cardName?' '+r.cardName:'') : ''}
+          ${r.date}${r.payment?' · '+r.payment+(r.cardName?' '+r.cardName:''):''}
         </div>
       </div>
       <div class="record-amount ${colorClass}">${prefix}${fmt(r.amount)}</div>
     </div>`).join('')
-    : `<div class="empty-state"><div class="empty-icon">📭</div>無資料</div>`;
+  : `<div class="empty-state"><div class="empty-icon">📭</div>無資料</div>`;
 
-  const total = recs.reduce((s,r)=>s+r.amount, 0);
-  const totalRow = recs.length ? `
+  const summaryRow = recs.length ? `
     <div style="display:flex;justify-content:space-between;padding:12px 0;
       border-top:1px solid var(--border);margin-top:8px">
       <span style="color:var(--text-dim);font-size:13px">共 ${recs.length} 筆</span>
       <span class="summary-row-value ${colorClass}"
         style="font-family:'DM Mono',monospace">${prefix}${fmt(total)}</span>
+    </div>` : '';
+
+  const paginationBar = totalPages > 1 ? `
+    <div style="display:flex;align-items:center;justify-content:space-between;
+      padding:12px 0;gap:8px;border-top:1px solid var(--border);margin-top:8px">
+      <button class="btn btn-secondary" style="flex:1;padding:10px"
+        onclick="renderDrillPage(${page-1})" ${page===0?'disabled':''}>← 上一頁</button>
+      <span style="font-size:12px;color:var(--text-dim);white-space:nowrap;
+        font-family:'DM Mono',monospace">${page+1} / ${totalPages}</span>
+      <button class="btn btn-secondary" style="flex:1;padding:10px"
+        onclick="renderDrillPage(${page+1})" ${page===totalPages-1?'disabled':''}>下一頁 →</button>
     </div>` : '';
 
   const html = `
@@ -1483,13 +1512,22 @@ function showDrillDetail(drillType, key, from, to, monthLabel) {
     </div>
     <div style="font-size:11px;color:var(--text-dimmer);margin-bottom:14px;font-family:'DM Mono',monospace">
       ${fmtD(from)} ～ ${fmtD(to)}
+      ${totalPages>1?`· 第${page*DRILL_PAGE_SIZE+1}～${Math.min((page+1)*DRILL_PAGE_SIZE,recs.length)}筆`:''}
     </div>
     <div class="records-list">${rows}</div>
-    ${totalRow}
+    ${summaryRow}
+    ${paginationBar}
     <div class="bottom-bar">
       <button class="btn btn-secondary" onclick="bookPop()">返回上頁</button>
     </div>`;
-  bookPush(html);
+
+  if(bookStack.length === 0) {
+    bookRoot(html);
+  } else {
+    bookStack[bookStack.length-1] = html;
+    document.getElementById('book-content').innerHTML = html;
+    window.scrollTo(0, 0);
+  }
 }
 
 // Build a clickable breakdown card
@@ -1676,7 +1714,6 @@ function confirmDeleteAll() {
 async function deleteAllRecords() {
   hideModal();
   records = [];
-  window._intentionalClear = true;
   try {
     await saveData();
     showToast('✅ 所有紀錄已清除');
@@ -2069,11 +2106,10 @@ function expenseRenameConfirm() {
     if(Object.keys(EXPENSE_CATS).includes(newName) && newName!==main) { showToast('此大分類名稱已存在'); return; }
     const subs = EXPENSE_CATS[main];
     delete EXPENSE_CATS[main];
-    // Rebuild to preserve key order
     const newObj = {};
-    Object.keys(EXPENSE_CATS).forEach(k=>newObj[k]=EXPENSE_CATS[k]);
-    // Re-insert with new name — just assign
-    EXPENSE_CATS[newName] = subs;
+    Object.keys(EXPENSE_CATS).forEach(k => newObj[k] = EXPENSE_CATS[k]);
+    newObj[newName] = subs;
+    EXPENSE_CATS = newObj;
     saveCategories();
     showToast(`✅ 大分類「${main}」改為「${newName}」`);
   } else {
